@@ -1,0 +1,1085 @@
+[
+  {
+    "stage": "P0",
+    "parent": 1,
+    "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/1",
+    "children": [
+      {
+        "task": "P0.1",
+        "number": 12,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/12",
+        "branch": "codex/feat/p0-foundation-1",
+        "title": "P0.1 — Fixar Rust/MSRV, NDK e ferramentas auxiliares",
+        "scope": "Fixar Rust/MSRV, NDK e ferramentas auxiliares; registrar versões e licenças.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:high",
+          "area:foundation"
+        ]
+      },
+      {
+        "task": "P0.2",
+        "number": 13,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/13",
+        "branch": "codex/feat/p0-foundation-1",
+        "title": "P0.2 — Configurar builds `x86_64-linux-android` e `aarch64-linux-android`",
+        "scope": "Configurar builds `x86_64-linux-android` e `aarch64-linux-android`.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:high",
+          "area:foundation"
+        ]
+      },
+      {
+        "task": "P0.3",
+        "number": 14,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/14",
+        "branch": "codex/feat/p0-foundation-1",
+        "title": "P0.3 — Definir `CarloError`, códigos de saída, logs em stderr e mensagens tipadas",
+        "scope": "Definir `CarloError`, códigos de saída, logs em stderr e mensagens tipadas.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:high",
+          "area:foundation"
+        ]
+      },
+      {
+        "task": "P0.4",
+        "number": 15,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/15",
+        "branch": "codex/feat/p0-foundation-1",
+        "title": "P0.4 — Implementar `--version`, `doctor` e estrutura de `serve`",
+        "scope": "Implementar `--version`, `doctor` e estrutura de `serve`.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:high",
+          "area:foundation"
+        ]
+      },
+      {
+        "task": "P0.5",
+        "number": 16,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/16",
+        "branch": "codex/feat/p0-foundation-1",
+        "title": "P0.5 — Detectar API, ABI, UID, contexto SELinux e recursos disponíveis sem alterá-los",
+        "scope": "Detectar API, ABI, UID, contexto SELinux e recursos disponíveis sem alterá-los.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:high",
+          "area:foundation"
+        ]
+      },
+      {
+        "task": "P0.6",
+        "number": 17,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/17",
+        "branch": "codex/feat/p0-foundation-1",
+        "title": "P0.6 — Preparar implantação em diretório temporário exclusivo e limpeza por sessão",
+        "scope": "Preparar implantação em diretório temporário exclusivo e limpeza por sessão.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:high",
+          "area:foundation"
+        ]
+      }
+    ]
+  },
+  {
+    "stage": "P1",
+    "parent": 2,
+    "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/2",
+    "children": [
+      {
+        "task": "P1.1",
+        "number": 18,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/18",
+        "branch": "codex/spike/p1-1-identificar-simbolos-exportados-de-libbinder-18",
+        "title": "P1.1 — Identificar símbolos exportados de libbinder_ndk e acesso ao ServiceManager no alvo API 34",
+        "scope": "Identificar símbolos exportados de libbinder_ndk e acesso ao ServiceManager no alvo API 34; decidir bindings Rust reutilizáveis versus FFI C mínima.",
+        "labels": [
+          "roadmap",
+          "type:spike",
+          "priority:high",
+          "area:binder",
+          "area:hierarchy"
+        ]
+      },
+      {
+        "task": "P1.2",
+        "number": 19,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/19",
+        "branch": "codex/spike/p1-2-fixar-revisao-aosp-correspondente-ao-alvo-19",
+        "title": "P1.2 — Fixar revisão AOSP correspondente ao alvo",
+        "scope": "Fixar revisão AOSP correspondente ao alvo; listar interfaces, transações, flags, assinaturas, permissões e formatos de parcel utilizados.",
+        "labels": [
+          "roadmap",
+          "type:spike",
+          "priority:high",
+          "area:binder",
+          "area:hierarchy"
+        ]
+      },
+      {
+        "task": "P1.3",
+        "number": 20,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/20",
+        "branch": "codex/spike/p1-3-implementar-pool-binder-referencias-locais-re-20",
+        "title": "P1.3 — Implementar pool Binder, referências locais/remotas e callbacks mínimos de `IAccessibilityServiceClient`…",
+        "scope": "Implementar pool Binder, referências locais/remotas e callbacks mínimos de `IAccessibilityServiceClient` necessários para registro e inicialização.",
+        "labels": [
+          "roadmap",
+          "type:spike",
+          "priority:high",
+          "area:binder",
+          "area:hierarchy"
+        ]
+      },
+      {
+        "task": "P1.4",
+        "number": 21,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/21",
+        "branch": "codex/spike/p1-4-codificar-configuracao-minima-de-accessibilit-21",
+        "title": "P1.4 — Codificar configuração mínima de `AccessibilityServiceInfo`",
+        "scope": "Codificar configuração mínima de `AccessibilityServiceInfo`; registrar e receber `IAccessibilityServiceConnection` e identificador da conexão.",
+        "labels": [
+          "roadmap",
+          "type:spike",
+          "priority:high",
+          "area:binder",
+          "area:hierarchy"
+        ]
+      },
+      {
+        "task": "P1.5",
+        "number": 22,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/22",
+        "branch": "codex/spike/p1-5-implementar-consulta-de-um-no-e-callback-de-r-22",
+        "title": "P1.5 — Implementar consulta de um nó e callback de resultado, correlacionando IDs",
+        "scope": "Implementar consulta de um nó e callback de resultado, correlacionando IDs.",
+        "labels": [
+          "roadmap",
+          "type:spike",
+          "priority:high",
+          "area:binder",
+          "area:hierarchy"
+        ]
+      },
+      {
+        "task": "P1.6",
+        "number": 23,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/23",
+        "branch": "codex/spike/p1-6-decodificar-campos-minimos-de-accessibilityno-23",
+        "title": "P1.6 — Decodificar campos mínimos de `AccessibilityNodeInfo`, incluindo texto, bounds, identificadores e…",
+        "scope": "Decodificar campos mínimos de `AccessibilityNodeInfo`, incluindo texto, bounds, identificadores e propriedades booleanas, com limites de leitura.",
+        "labels": [
+          "roadmap",
+          "type:spike",
+          "priority:high",
+          "area:binder",
+          "area:hierarchy"
+        ]
+      },
+      {
+        "task": "P1.7",
+        "number": 24,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/24",
+        "branch": "codex/spike/p1-7-liberar-registro-ao-encerrar-24",
+        "title": "P1.7 — Liberar registro ao encerrar",
+        "scope": "Liberar registro ao encerrar; detectar sessão concorrente e recusar conflito.",
+        "labels": [
+          "roadmap",
+          "type:spike",
+          "priority:high",
+          "area:binder",
+          "area:hierarchy"
+        ]
+      }
+    ]
+  },
+  {
+    "stage": "P2",
+    "parent": 3,
+    "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/3",
+    "children": [
+      {
+        "task": "P2.1",
+        "number": 25,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/25",
+        "branch": "codex/spike/p2-1-criar-encoder-h-264-por-amediacodec-configura-25",
+        "title": "P2.1 — Criar encoder H.264 por AMediaCodec, configurar Surface e produzir primeiro vídeo sintético por EGL/GLES…",
+        "scope": "Criar encoder H.264 por AMediaCodec, configurar Surface e produzir primeiro vídeo sintético por EGL/GLES nativos. Drenar saída sem capturar tela ainda.",
+        "labels": [
+          "roadmap",
+          "type:spike",
+          "priority:high",
+          "area:display",
+          "area:video"
+        ]
+      },
+      {
+        "task": "P2.2",
+        "number": 26,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/26",
+        "branch": "codex/spike/p2-2-identificar-display-real-e-testar-rota-binder-26",
+        "title": "P2.2 — Identificar display real e testar rota Binder de espelhamento permitida a `shell`: contratos de…",
+        "scope": "Identificar display real e testar rota Binder de espelhamento permitida a `shell`: contratos de display/SurfaceFlinger e respectivos callbacks/tokens.",
+        "labels": [
+          "roadmap",
+          "type:spike",
+          "priority:high",
+          "area:display",
+          "area:video"
+        ]
+      },
+      {
+        "task": "P2.3",
+        "number": 27,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/27",
+        "branch": "codex/spike/p2-3-provar-ligacao-da-saida-do-display-a-surface-27",
+        "title": "P2.3 — Provar ligação da saída do display à Surface do encoder. Investigar a passagem do produtor gráfico/Surface…",
+        "scope": "Provar ligação da saída do display à Surface do encoder. Investigar a passagem do produtor gráfico/Surface pelo Binder; `ANativeWindow` é opaco, não fazer casts para estruturas C++ privadas nem presumir conversão pública para Binder.",
+        "labels": [
+          "roadmap",
+          "type:spike",
+          "priority:high",
+          "area:display",
+          "area:video"
+        ]
+      },
+      {
+        "task": "P2.4",
+        "number": 28,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/28",
+        "branch": "codex/spike/p2-4-implementar-apenas-a-rota-demonstrada-para-ap-28",
+        "title": "P2.4 — Implementar apenas a rota demonstrada para API 34 e registrar dependências",
+        "scope": "Implementar apenas a rota demonstrada para API 34 e registrar dependências.",
+        "labels": [
+          "roadmap",
+          "type:spike",
+          "priority:high",
+          "area:display",
+          "area:video"
+        ]
+      },
+      {
+        "task": "P2.5",
+        "number": 29,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/29",
+        "branch": "codex/spike/p2-5-tratar-permissao-negada-display-ausente-e-for-29",
+        "title": "P2.5 — Tratar permissão negada, display ausente e formato incompatível separadamente",
+        "scope": "Tratar permissão negada, display ausente e formato incompatível separadamente.",
+        "labels": [
+          "roadmap",
+          "type:spike",
+          "priority:high",
+          "area:display",
+          "area:video"
+        ]
+      }
+    ]
+  },
+  {
+    "stage": "P3",
+    "parent": 4,
+    "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/4",
+    "children": [
+      {
+        "task": "P3.1",
+        "number": 30,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/30",
+        "branch": "codex/feat/p3-1-dois-canais-independentes-sobre-adb-controle-30",
+        "title": "P3.1 — Dois canais independentes sobre ADB: controle/hierarquia e vídeo. Sem servidor HTTP, WebSocket ou acesso…",
+        "scope": "Dois canais independentes sobre ADB: controle/hierarquia e vídeo. Sem servidor HTTP, WebSocket ou acesso direto USB nesta primeira implementação.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:high",
+          "area:protocol"
+        ]
+      },
+      {
+        "task": "P3.2",
+        "number": 31,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/31",
+        "branch": "codex/feat/p3-2-preferir-unix-socket-em-diretorio-de-sessao-c-31",
+        "title": "P3.2 — Preferir Unix socket em diretório de sessão com acesso restrito",
+        "scope": "Preferir Unix socket em diretório de sessão com acesso restrito; validar exposição via ADB. Usar identificador de sessão e validar credenciais do peer.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:high",
+          "area:protocol"
+        ]
+      },
+      {
+        "task": "P3.3",
+        "number": 32,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/32",
+        "branch": "codex/feat/p3-3-definir-handshake-versao-do-protocolo-versao-32",
+        "title": "P3.3 — Definir handshake: versão do protocolo, versão do binário, API/ABI e capacidades",
+        "scope": "Definir handshake: versão do protocolo, versão do binário, API/ABI e capacidades.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:high",
+          "area:protocol"
+        ]
+      },
+      {
+        "task": "P3.4",
+        "number": 33,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/33",
+        "branch": "codex/feat/p3-4-cabecalho-binario-com-magic-versao-tipo-reque-33",
+        "title": "P3.4 — Cabeçalho binário com magic, versão, tipo, request ID e tamanho",
+        "scope": "Cabeçalho binário com magic, versão, tipo, request ID e tamanho; ordem de bytes documentada. Controle JSON; XML e vídeo como payloads binários, sem Base64.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:high",
+          "area:protocol"
+        ]
+      },
+      {
+        "task": "P3.5",
+        "number": 34,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/34",
+        "branch": "codex/feat/p3-5-validar-comprimento-antes-de-alocar-34",
+        "title": "P3.5 — Validar comprimento antes de alocar",
+        "scope": "Validar comprimento antes de alocar; leitura fragmentada, EOF, versões incompatíveis e mensagens desconhecidas devem ter respostas definidas.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:high",
+          "area:protocol"
+        ]
+      },
+      {
+        "task": "P3.6",
+        "number": 35,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/35",
+        "branch": "codex/feat/p3-6-incluir-vinculacao-dos-dois-canais-a-mesma-se-35",
+        "title": "P3.6 — Incluir vinculação dos dois canais à mesma sessão e timeout para canal ausente",
+        "scope": "Incluir vinculação dos dois canais à mesma sessão e timeout para canal ausente.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:high",
+          "area:protocol"
+        ]
+      }
+    ]
+  },
+  {
+    "stage": "P4",
+    "parent": 5,
+    "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/5",
+    "children": [
+      {
+        "task": "P4.1",
+        "number": 36,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/36",
+        "branch": "codex/feat/p4-1-enumerar-janelas-e-arvore-ativa-36",
+        "title": "P4.1 — Enumerar janelas e árvore ativa",
+        "scope": "Enumerar janelas e árvore ativa; preservar hierarquia e identificar display.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:hierarchy"
+        ]
+      },
+      {
+        "task": "P4.2",
+        "number": 37,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/37",
+        "branch": "codex/feat/p4-2-percorrer-filhos-e-deduplicar-por-identidade-37",
+        "title": "P4.2 — Percorrer filhos e deduplicar por identidade de nó/janela dentro do snapshot",
+        "scope": "Percorrer filhos e deduplicar por identidade de nó/janela dentro do snapshot.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:hierarchy"
+        ]
+      },
+      {
+        "task": "P4.3",
+        "number": 38,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/38",
+        "branch": "codex/feat/p4-3-entregar-inicialmente-os-16-atributos-do-benc-38",
+        "title": "P4.3 — Entregar inicialmente os 16 atributos do benchmark: text, resource-id, class, package, content-desc,…",
+        "scope": "Entregar inicialmente os 16 atributos do benchmark: text, resource-id, class, package, content-desc, bounds, enabled, clickable, focusable, focused, selected, scrollable, checkable, checked, long-clickable e password.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:hierarchy"
+        ]
+      },
+      {
+        "task": "P4.4",
+        "number": 39,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/39",
+        "branch": "codex/feat/p4-4-preservar-unicode-escapar-xml-e-manter-nos-es-39",
+        "title": "P4.4 — Preservar Unicode, escapar XML e manter nós estruturais sem texto",
+        "scope": "Preservar Unicode, escapar XML e manter nós estruturais sem texto.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:hierarchy"
+        ]
+      },
+      {
+        "task": "P4.5",
+        "number": 40,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/40",
+        "branch": "codex/feat/p4-5-informar-snapshot-id-tempos-monotonicos-de-in-40",
+        "title": "P4.5 — Informar snapshot ID, tempos monotônicos de início/fim, display ID, dimensões, rotação e geração da…",
+        "scope": "Informar snapshot ID, tempos monotônicos de início/fim, display ID, dimensões, rotação e geração da geometria. IDs de nós não são seletores persistentes.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:hierarchy"
+        ]
+      },
+      {
+        "task": "P4.6",
+        "number": 41,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/41",
+        "branch": "codex/feat/p4-6-evitar-cache-na-primeira-versao-41",
+        "title": "P4.6 — Evitar cache na primeira versão",
+        "scope": "Evitar cache na primeira versão; receber invalidações e impedir resposta antiga de satisfazer requisição nova. Adicionar cache apenas com teste de invalidação.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:hierarchy"
+        ]
+      },
+      {
+        "task": "P4.7",
+        "number": 42,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/42",
+        "branch": "codex/feat/p4-7-tratar-janela-removida-callback-tardio-e-arvo-42",
+        "title": "P4.7 — Tratar janela removida, callback tardio e árvore mudando durante aquisição. Fazer retry limitado ou marcar…",
+        "scope": "Tratar janela removida, callback tardio e árvore mudando durante aquisição. Fazer retry limitado ou marcar snapshot inconsistente; não prometer atomicidade.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:hierarchy"
+        ]
+      },
+      {
+        "task": "P4.8",
+        "number": 43,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/43",
+        "branch": "codex/feat/p4-8-declarar-arvores-vazias-e-truncamento-43",
+        "title": "P4.8 — Declarar árvores vazias e truncamento",
+        "scope": "Declarar árvores vazias e truncamento; nunca devolver XML parcial como sucesso.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:hierarchy"
+        ]
+      }
+    ]
+  },
+  {
+    "stage": "P5",
+    "parent": 6,
+    "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/6",
+    "children": [
+      {
+        "task": "P5.1",
+        "number": 44,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/44",
+        "branch": "codex/feat/p5-1-video-start-aceita-display-tamanho-maximo-fps-44",
+        "title": "P5.1 — `video.start` aceita display, tamanho máximo, fps, bitrate e preferência de encoder",
+        "scope": "`video.start` aceita display, tamanho máximo, fps, bitrate e preferência de encoder; resposta informa configuração realmente aceita e codec selecionado.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:video"
+        ]
+      },
+      {
+        "task": "P5.2",
+        "number": 45,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/45",
+        "branch": "codex/feat/p5-2-reportar-hardware-software-quando-houver-info-45",
+        "title": "P5.2 — Reportar hardware/software quando houver informação confiável",
+        "scope": "Reportar hardware/software quando houver informação confiável; caso contrário, usar `unknown`. Degradação de qualidade ou troca de encoder deve ser explícita.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:video"
+        ]
+      },
+      {
+        "task": "P5.3",
+        "number": 46,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/46",
+        "branch": "codex/feat/p5-3-enviar-configuracao-sps-pps-dimensoes-stream-46",
+        "title": "P5.3 — Enviar configuração SPS/PPS, dimensões, stream generation, PTS, flags de codec e keyframe em formato…",
+        "scope": "Enviar configuração SPS/PPS, dimensões, stream generation, PTS, flags de codec e keyframe em formato documentado.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:video"
+        ]
+      },
+      {
+        "task": "P5.4",
+        "number": 47,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/47",
+        "branch": "codex/feat/p5-4-preservar-buffers-de-saida-ate-concluir-copia-47",
+        "title": "P5.4 — Preservar buffers de saída até concluir cópia/escrita",
+        "scope": "Preservar buffers de saída até concluir cópia/escrita; liberar todos os índices do codec inclusive em erros. Evitar caminho por pixels na CPU quando a rota Surface direta estiver demonstrada; não prometer zero-copy integral.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:video"
+        ]
+      },
+      {
+        "task": "P5.5",
+        "number": 48,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/48",
+        "branch": "codex/feat/p5-5-consumidor-lento-deve-atingir-limite-de-fila-48",
+        "title": "P5.5 — Consumidor lento deve atingir limite de fila/deadline e interromper somente vídeo. Não descartar NALs…",
+        "scope": "Consumidor lento deve atingir limite de fila/deadline e interromper somente vídeo. Não descartar NALs arbitrários: podem ser referência para frames seguintes.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:video"
+        ]
+      },
+      {
+        "task": "P5.6",
+        "number": 49,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/49",
+        "branch": "codex/feat/p5-6-nova-sessao-reconfiguracao-envia-configuracao-49",
+        "title": "P5.6 — Nova sessão/reconfiguração envia configuração e keyframe para permitir decode",
+        "scope": "Nova sessão/reconfiguração envia configuração e keyframe para permitir decode.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:video"
+        ]
+      },
+      {
+        "task": "P5.7",
+        "number": 50,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/50",
+        "branch": "codex/feat/p5-7-parar-video-mantem-hierarquia-disponivel-e-li-50",
+        "title": "P5.7 — Parar vídeo mantém hierarquia disponível e libera display virtual, Surface e codec",
+        "scope": "Parar vídeo mantém hierarquia disponível e libera display virtual, Surface e codec.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:video"
+        ]
+      }
+    ]
+  },
+  {
+    "stage": "P6",
+    "parent": 7,
+    "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/7",
+    "children": [
+      {
+        "task": "P6.1",
+        "number": 51,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/51",
+        "branch": "codex/feat/p6-1-comecar-pelo-display-principal-51",
+        "title": "P6.1 — Começar pelo display principal",
+        "scope": "Começar pelo display principal; depois seleção de outro display existente.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:display"
+        ]
+      },
+      {
+        "task": "P6.2",
+        "number": 52,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/52",
+        "branch": "codex/feat/p6-2-detectar-rotacao-tamanho-tela-desligada-displ-52",
+        "title": "P6.2 — Detectar rotação, tamanho, tela desligada, display removido e mudança de modo",
+        "scope": "Detectar rotação, tamanho, tela desligada, display removido e mudança de modo.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:display"
+        ]
+      },
+      {
+        "task": "P6.3",
+        "number": 53,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/53",
+        "branch": "codex/feat/p6-3-reiniciar-captura-encoder-de-forma-ordenada-q-53",
+        "title": "P6.3 — Reiniciar captura/encoder de forma ordenada quando necessário, emitindo evento com nova geração de…",
+        "scope": "Reiniciar captura/encoder de forma ordenada quando necessário, emitindo evento com nova geração de geometria, dimensões e configuração.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:display"
+        ]
+      },
+      {
+        "task": "P6.4",
+        "number": 54,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/54",
+        "branch": "codex/feat/p6-4-associar-snapshots-e-pacotes-a-geracao-corres-54",
+        "title": "P6.4 — Associar snapshots e pacotes à geração correspondente",
+        "scope": "Associar snapshots e pacotes à geração correspondente; expor timestamps sem afirmar sincronização atômica entre árvore e imagem.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:display"
+        ]
+      },
+      {
+        "task": "P6.5",
+        "number": 55,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/55",
+        "branch": "codex/feat/p6-5-definir-estado-suspenso-erro-para-conteudo-in-55",
+        "title": "P6.5 — Definir estado suspenso/erro para conteúdo indisponível ou protegido, sem tentar contornar restrições de…",
+        "scope": "Definir estado suspenso/erro para conteúdo indisponível ou protegido, sem tentar contornar restrições de captura.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:display"
+        ]
+      }
+    ]
+  },
+  {
+    "stage": "P7",
+    "parent": 8,
+    "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/8",
+    "children": [
+      {
+        "task": "P7.1",
+        "number": 56,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/56",
+        "branch": "codex/feat/p7-1-estados-explicitos-para-sessao-e-video-56",
+        "title": "P7.1 — Estados explícitos para sessão e vídeo",
+        "scope": "Estados explícitos para sessão e vídeo; start/stop/shutdown idempotentes.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:runtime"
+        ]
+      },
+      {
+        "task": "P7.2",
+        "number": 57,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/57",
+        "branch": "codex/feat/p7-2-tratar-eof-perda-de-adb-cliente-ausente-sigte-57",
+        "title": "P7.2 — Tratar EOF, perda de ADB, cliente ausente, SIGTERM/SIGINT, morte de serviço Binder e falha/revogação de…",
+        "scope": "Tratar EOF, perda de ADB, cliente ausente, SIGTERM/SIGINT, morte de serviço Binder e falha/revogação de codec, com erro tipado e retry limitado.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:runtime"
+        ]
+      },
+      {
+        "task": "P7.3",
+        "number": 58,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/58",
+        "branch": "codex/feat/p7-3-ownership-explicito-de-cada-fd-referencia-bin-58",
+        "title": "P7.3 — Ownership explícito de cada FD, referência Binder, listener, Surface e codec",
+        "scope": "Ownership explícito de cada FD, referência Binder, listener, Surface e codec.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:runtime"
+        ]
+      },
+      {
+        "task": "P7.4",
+        "number": 59,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/59",
+        "branch": "codex/feat/p7-4-deadline-monotonico-para-operacoes-e-encerram-59",
+        "title": "P7.4 — Deadline monotônico para operações e encerramento",
+        "scope": "Deadline monotônico para operações e encerramento; chamadas Binder síncronas não são necessariamente canceláveis. Não criar workers ilimitados para abandoná-las. Host pode encerrar o processo após período de graça se uma chamada ficar presa.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:runtime"
+        ]
+      },
+      {
+        "task": "P7.5",
+        "number": 60,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/60",
+        "branch": "codex/feat/p7-5-impedir-sessoes-conflitantes-por-dispositivo-60",
+        "title": "P7.5 — Impedir sessões conflitantes por dispositivo e separar morte de vídeo de morte do canal de controle.…",
+        "scope": "Impedir sessões conflitantes por dispositivo e separar morte de vídeo de morte do canal de controle. Reconexão começa sessão nova na primeira versão.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:runtime"
+        ]
+      },
+      {
+        "task": "P7.6",
+        "number": 61,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/61",
+        "branch": "codex/feat/p7-6-estatisticas-de-bytes-frames-filas-timeouts-e-61",
+        "title": "P7.6 — Estatísticas de bytes, frames, filas, timeouts e duração de aquisição",
+        "scope": "Estatísticas de bytes, frames, filas, timeouts e duração de aquisição; logs não incluem texto da tela, XML completo ou conteúdo de campos protegidos.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:runtime"
+        ]
+      }
+    ]
+  },
+  {
+    "stage": "P8",
+    "parent": 9,
+    "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/9",
+    "children": [
+      {
+        "task": "P8.1",
+        "number": 62,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/62",
+        "branch": "codex/feat/p8-1-adicionar-api-35-e-36-apos-api-34-62",
+        "title": "P8.1 — Adicionar API 35 e 36 após API 34",
+        "scope": "Adicionar API 35 e 36 após API 34; avaliar API 29–33 posteriormente.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:compat"
+        ]
+      },
+      {
+        "task": "P8.2",
+        "number": 63,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/63",
+        "branch": "codex/feat/p8-2-separar-adapters-por-contrato-comprovado-com-63",
+        "title": "P8.2 — Separar adapters por contrato comprovado, com revisão AOSP, transações e layouts de parcel registrados.…",
+        "scope": "Separar adapters por contrato comprovado, com revisão AOSP, transações e layouts de parcel registrados. SDK_INT sozinho não prova compatibilidade OEM.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:compat"
+        ]
+      },
+      {
+        "task": "P8.3",
+        "number": 64,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/64",
+        "branch": "codex/feat/p8-3-doctor-e-handshake-anunciam-recursos-disponiv-64",
+        "title": "P8.3 — `doctor` e handshake anunciam recursos disponíveis por módulo, com razão para indisponibilidade. Versão…",
+        "scope": "`doctor` e handshake anunciam recursos disponíveis por módulo, com razão para indisponibilidade. Versão desconhecida não recebe adapter por tentativa cega.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:compat"
+        ]
+      },
+      {
+        "task": "P8.4",
+        "number": 65,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/65",
+        "branch": "codex/feat/p8-4-validar-arm64-e-paginas-de-memoria-de-16-kib-65",
+        "title": "P8.4 — Validar arm64 e páginas de memória de 16 KiB",
+        "scope": "Validar arm64 e páginas de memória de 16 KiB; registrar dependências ELF e símbolos necessários, incluindo bibliotecas de plataforma não públicas.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:compat"
+        ]
+      },
+      {
+        "task": "P8.5",
+        "number": 66,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/66",
+        "branch": "codex/feat/p8-5-distribuir-binarios-por-abi-perfil-com-checks-66",
+        "title": "P8.5 — Distribuir binários por ABI/perfil com checksums e manifesto de build",
+        "scope": "Distribuir binários por ABI/perfil com checksums e manifesto de build.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:compat"
+        ]
+      }
+    ]
+  },
+  {
+    "stage": "P9",
+    "parent": 10,
+    "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/10",
+    "children": [
+      {
+        "task": "P9.1",
+        "number": 67,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/67",
+        "branch": "codex/feat/p9-1-criar-cliente-minimo-para-deploy-handshake-du-67",
+        "title": "P9.1 — Criar cliente mínimo para deploy, handshake, dump XML, recepção H.264 e teardown",
+        "scope": "Criar cliente mínimo para deploy, handshake, dump XML, recepção H.264 e teardown.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:integration"
+        ]
+      },
+      {
+        "task": "P9.2",
+        "number": 68,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/68",
+        "branch": "codex/feat/p9-2-verificar-checksum-versao-diretorio-exclusivo-68",
+        "title": "P9.2 — Verificar checksum, versão, diretório exclusivo, quote de comandos e limpeza",
+        "scope": "Verificar checksum, versão, diretório exclusivo, quote de comandos e limpeza.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:integration"
+        ]
+      },
+      {
+        "task": "P9.3",
+        "number": 69,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/69",
+        "branch": "codex/feat/p9-3-definir-backend-explicitamente-selecionavel-69",
+        "title": "P9.3 — Definir backend explicitamente selecionável",
+        "scope": "Definir backend explicitamente selecionável; preservar uiautomator2 existente.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:integration"
+        ]
+      },
+      {
+        "task": "P9.4",
+        "number": 70,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/70",
+        "branch": "codex/feat/p9-4-integrar-dump-com-windowdump-e-video-com-cons-70",
+        "title": "P9.4 — Integrar dump com WindowDump e vídeo com consumidor/recorder no host",
+        "scope": "Integrar dump com WindowDump e vídeo com consumidor/recorder no host.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:integration"
+        ]
+      },
+      {
+        "task": "P9.5",
+        "number": 71,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/71",
+        "branch": "codex/feat/p9-5-mapear-dependencias-atuais-de-u2-construtor-w-71",
+        "title": "P9.5 — Mapear dependências atuais de `_u2`: construtor, window_size e esperas também usam uiautomator2. Um modo…",
+        "scope": "Mapear dependências atuais de `_u2`: construtor, window_size e esperas também usam uiautomator2. Um modo Carlo não deve instalar/iniciar esse agente sem necessidade.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:integration"
+        ]
+      },
+      {
+        "task": "P9.6",
+        "number": 72,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/72",
+        "branch": "codex/feat/p9-6-resolver-esperas-no-host-usando-snapshots-de-72",
+        "title": "P9.6 — Resolver esperas no host usando snapshots de Carlo, preservando semântica pública",
+        "scope": "Resolver esperas no host usando snapshots de Carlo, preservando semântica pública; toque/texto/comandos permanecem no transporte ADB existente.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:integration"
+        ]
+      },
+      {
+        "task": "P9.7",
+        "number": 73,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/73",
+        "branch": "codex/feat/p9-7-respeitar-camadas-geppetto-execucao-de-proces-73",
+        "title": "P9.7 — Respeitar camadas Geppetto: execução de processos somente em `core/`, erros próprios, tipos estritos e…",
+        "scope": "Respeitar camadas Geppetto: execução de processos somente em `core/`, erros próprios, tipos estritos e fixtures unitárias sem dispositivo.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:integration"
+        ]
+      },
+      {
+        "task": "P9.8",
+        "number": 74,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/74",
+        "branch": "codex/feat/p9-8-documentar-instalacao-e-uso-74",
+        "title": "P9.8 — Documentar instalação e uso",
+        "scope": "Documentar instalação e uso; integrar inspetor/artefatos sem falha de captura alterar resultado do teste. Migração padrão é decisão posterior aos benchmarks.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:integration"
+        ]
+      }
+    ]
+  },
+  {
+    "stage": "P10",
+    "parent": 11,
+    "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/11",
+    "children": [
+      {
+        "task": "P10.1",
+        "number": 75,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/75",
+        "branch": "codex/feat/p10-1-unitarios-de-framing-limites-xml-estado-erros-75",
+        "title": "P10.1 — Unitários de framing, limites, XML, estado, erros e codecs de parcel com fixtures sintéticas ou de app…",
+        "scope": "Unitários de framing, limites, XML, estado, erros e codecs de parcel com fixtures sintéticas ou de app controlado. Testes de propriedades/fuzzing nos parsers.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:quality"
+        ]
+      },
+      {
+        "task": "P10.2",
+        "number": 76,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/76",
+        "branch": "codex/feat/p10-2-miri-para-wrappers-logica-executaveis-no-host-76",
+        "title": "P10.2 — Miri para wrappers/lógica executáveis no host com FFI simulada",
+        "scope": "Miri para wrappers/lógica executáveis no host com FFI simulada; testes Android são necessários para Binder/NDK reais e não são substituídos por Miri.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:quality"
+        ]
+      },
+      {
+        "task": "P10.3",
+        "number": 77,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/77",
+        "branch": "codex/feat/p10-3-integracao-em-emulador-arvore-fresca-multipla-77",
+        "title": "P10.3 — Integração em emulador: árvore fresca, múltiplas janelas, rotação, desconexão, consumidor lento, perda de…",
+        "scope": "Integração em emulador: árvore fresca, múltiplas janelas, rotação, desconexão, consumidor lento, perda de serviço e ciclos start/stop.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:quality"
+        ]
+      },
+      {
+        "task": "P10.4",
+        "number": 78,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/78",
+        "branch": "codex/feat/p10-4-rodar-fmt-clippy-testes-host-e-cross-build-do-78",
+        "title": "P10.4 — Rodar fmt, Clippy, testes host e cross-build dos alvos suportados no CI",
+        "scope": "Rodar fmt, Clippy, testes host e cross-build dos alvos suportados no CI.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:quality"
+        ]
+      },
+      {
+        "task": "P10.5",
+        "number": 79,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/79",
+        "branch": "codex/feat/p10-5-comparar-carlo-nativo-agente-java-minimo-e-ui-79",
+        "title": "P10.5 — Comparar Carlo nativo, agente Java mínimo e uiautomator2 na mesma tela, dispositivo, carga e transporte,…",
+        "scope": "Comparar Carlo nativo, agente Java mínimo e uiautomator2 na mesma tela, dispositivo, carga e transporte, com ordem alternada e aquecimento explícito.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:quality"
+        ]
+      },
+      {
+        "task": "P10.6",
+        "number": 80,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/80",
+        "branch": "codex/feat/p10-6-medir-p50-p95-p99-cpu-pss-rss-fds-threads-byt-80",
+        "title": "P10.6 — Medir p50/p95/p99, CPU, PSS/RSS, FDs, threads, bytes, fps, configuração do codec e latência de vídeo com…",
+        "scope": "Medir p50/p95/p99, CPU, PSS/RSS, FDs, threads, bytes, fps, configuração do codec e latência de vídeo com marcador visual. Reportar serviços compartilhados à parte.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:quality"
+        ]
+      },
+      {
+        "task": "P10.7",
+        "number": 81,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/81",
+        "branch": "codex/feat/p10-7-repetir-sob-carga-continua-e-amostrada-com-se-81",
+        "title": "P10.7 — Repetir sob carga contínua e amostrada, com/sem vídeo",
+        "scope": "Repetir sob carga contínua e amostrada, com/sem vídeo; sessões de 1, 10 e 60 minutos. Medir atraso de consumidor e estabilidade após aquecimento.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:quality"
+        ]
+      },
+      {
+        "task": "P10.8",
+        "number": 82,
+        "url": "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/82",
+        "branch": "codex/feat/p10-8-polir-um-gargalo-por-vez-transacoes-por-dump-82",
+        "title": "P10.8 — Polir um gargalo por vez: transações por dump, prefetch, cópias, alocações, formato de saída, fila de…",
+        "scope": "Polir um gargalo por vez: transações por dump, prefetch, cópias, alocações, formato de saída, fila de vídeo e ajustes de encoder; medir antes/depois.",
+        "labels": [
+          "roadmap",
+          "type:task",
+          "priority:normal",
+          "area:quality"
+        ]
+      }
+    ]
+  }
+]

@@ -1,0 +1,32 @@
+name: Implementation task
+description: A small deliverable linked to an existing roadmap parent
+title: "[Task] "
+labels: ["type:task"]
+body:
+  - type: input
+    id: parent
+    attributes:
+      label: Parent issue
+      description: Link the roadmap parent and attach this issue as a native sub-issue.
+      placeholder: "https://github.com/desodre/Carlo-puppet-of-geppetto/issues/1"
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Expected result
+      description: One concrete, independently verifiable outcome.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Done when
+      description: Observable criteria, failure cases and validation commands.
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies and compatibility
+      description: Referenced issues, API/ABI targets and known limitations.

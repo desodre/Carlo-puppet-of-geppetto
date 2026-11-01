@@ -1,0 +1,14 @@
+{
+  "serial": "emulator-5580",
+  "emulator": true,
+  "android_api": 34,
+  "abi": "x86_64",
+  "session_directory": "/data/local/tmp/carlo-5558c9ba77d74c8bbb80f7e0284ab5c4",
+  "command": [
+    "serve"
+  ],
+  "cleanup_removed": true,
+  "exit_code": 69,
+  "stdout": "",
+  "stderr": "carlo: serve protocol is planned in P3\n"
+}

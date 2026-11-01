@@ -1,0 +1,10 @@
+{
+  "ndk_version": "28.2.13676358",
+  "android_api": 29,
+  "reference_api": 34,
+  "elf_page_size": 16384,
+  "targets": {
+    "x86_64-linux-android": "x86_64-linux-android",
+    "aarch64-linux-android": "aarch64-linux-android"
+  }
+}
