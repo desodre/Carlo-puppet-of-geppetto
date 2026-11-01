@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "repository": "platform/frameworks/native",
+  "tag": "android-14.0.0_r1",
+  "revision": "bfcf75076e562945bae131a4929f29a90d0d2481",
+  "reference_is_image_source_provenance": false,
+  "files": [
+    {
+      "path": "libs/binder/ndk/include_platform/android/binder_manager.h",
+      "sha256": "eaa3f87905b003b56be8ffd978667cb36b39af416b8d7cdeb0a63b4c1bb6c142",
+      "url": "https://android.googlesource.com/platform/frameworks/native/+/bfcf75076e562945bae131a4929f29a90d0d2481/libs/binder/ndk/include_platform/android/binder_manager.h"
+    },
+    {
+      "path": "libs/binder/ndk/include_ndk/android/binder_ibinder.h",
+      "sha256": "d45ee770558e80d4c7b62ff51e48f03240dfcb777e9118b26effedaf1c8e10d7",
+      "url": "https://android.googlesource.com/platform/frameworks/native/+/bfcf75076e562945bae131a4929f29a90d0d2481/libs/binder/ndk/include_ndk/android/binder_ibinder.h"
+    },
+    {
+      "path": "libs/binder/ndk/libbinder_ndk.map.txt",
+      "sha256": "125ff1a5bea467e6928a5d5a9d9c26120337c4594ead9d4b4d3f73ed547df0c3",
+      "url": "https://android.googlesource.com/platform/frameworks/native/+/bfcf75076e562945bae131a4929f29a90d0d2481/libs/binder/ndk/libbinder_ndk.map.txt"
+    },
+    {
+      "path": "libs/binder/ndk/service_manager.cpp",
+      "sha256": "60847599adb6e9f836691fd09d700f63f8264ff449efba268c3d38a4204d865b",
+      "url": "https://android.googlesource.com/platform/frameworks/native/+/bfcf75076e562945bae131a4929f29a90d0d2481/libs/binder/ndk/service_manager.cpp"
+    },
+    {
+      "path": "libs/binder/rust/Android.bp",
+      "sha256": "6d8a0735cf148fa78c6cd82673b65e19c6d20778bd1c6897b6f212d514daf3d4",
+      "url": "https://android.googlesource.com/platform/frameworks/native/+/bfcf75076e562945bae131a4929f29a90d0d2481/libs/binder/rust/Android.bp"
+    },
+    {
+      "path": "libs/binder/rust/src/lib.rs",
+      "sha256": "bbaed015aafbfa0229af3c59905b924bd33268842608572c324808b0ab5dca75",
+      "url": "https://android.googlesource.com/platform/frameworks/native/+/bfcf75076e562945bae131a4929f29a90d0d2481/libs/binder/rust/src/lib.rs"
+    },
+    {
+      "path": "libs/binder/ndk/include_ndk/android/binder_status.h",
+      "sha256": "33cc1cca381979c0819ebf1ff07dcee85d767e4abee46bb982e533b6b4580858",
+      "url": "https://android.googlesource.com/platform/frameworks/native/+/bfcf75076e562945bae131a4929f29a90d0d2481/libs/binder/ndk/include_ndk/android/binder_status.h"
+    }
+  ]
+}

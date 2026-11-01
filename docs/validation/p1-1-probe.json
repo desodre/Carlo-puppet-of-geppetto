@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "environment": {
+    "schema_version": 1,
+    "agent_version": "0.1.0",
+    "platform": "android",
+    "architecture": "x86_64",
+    "android_api": 34,
+    "device_abi": "x86_64",
+    "effective_uid": 2000,
+    "selinux_context": "u:r:shell:s0",
+    "foundation_ready": true,
+    "checks": [
+      {
+        "name": "platform",
+        "status": "ok",
+        "detail": "Android runtime"
+      },
+      {
+        "name": "android_api",
+        "status": "ok",
+        "detail": "API meets the candidate native build floor (29)"
+      },
+      {
+        "name": "architecture",
+        "status": "ok",
+        "detail": "initial native build target"
+      },
+      {
+        "name": "identity",
+        "status": "ok",
+        "detail": "running as shell"
+      },
+      {
+        "name": "selinux_context",
+        "status": "ok",
+        "detail": "process context available; no policy changes made"
+      }
+    ],
+    "capabilities": [
+      {
+        "name": "binder_hierarchy",
+        "available": false,
+        "reason": "not implemented; P1/P4"
+      },
+      {
+        "name": "display_capture",
+        "available": false,
+        "reason": "not implemented; P2/P6"
+      },
+      {
+        "name": "h264_stream",
+        "available": false,
+        "reason": "not implemented; P2/P5"
+      },
+      {
+        "name": "serve_protocol",
+        "available": false,
+        "reason": "not implemented; P3"
+      }
+    ]
+  },
+  "outcome": {
+    "status": "passed",
+    "symbols": [
+      {
+        "name": "AServiceManager_checkService",
+        "available": true
+      },
+      {
+        "name": "AIBinder_decStrong",
+        "available": true
+      },
+      {
+        "name": "AIBinder_isRemote",
+        "available": true
+      },
+      {
+        "name": "AIBinder_ping",
+        "available": true
+      }
+    ],
+    "lookups": [
+      {
+        "name": "accessibility",
+        "found": true,
+        "remote": true,
+        "ping_status": 0
+      },
+      {
+        "name": "carlo.probe.absent",
+        "found": false,
+        "remote": null,
+        "ping_status": null
+      }
+    ]
+  },
+  "hierarchy_available": false
+}

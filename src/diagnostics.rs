@@ -170,6 +170,11 @@ impl Diagnostics {
         }
     }
 
+    // P1.1 is deliberately restricted to the first reference profile and shell identity.
+    pub(crate) fn api34_shell(&self) -> bool {
+        self.foundation_ready && self.android_api == Some(34) && self.effective_uid == Some(2000)
+    }
+
     /// Write a human-readable report without logging UI content or credentials.
     ///
     /// # Errors
@@ -305,6 +310,22 @@ mod tests {
                 !Diagnostics::from_environment("android", arch, api, None, uid, None)
                     .foundation_ready
             );
+        }
+    }
+
+    #[test]
+    fn binder_probe_accepts_only_api34_shell_even_when_foundation_is_ready() {
+        for (api, uid, expected) in [(34, 2000, true), (35, 2000, false), (34, 0, false)] {
+            let report = Diagnostics::from_environment(
+                "android",
+                "x86_64",
+                Some(api),
+                None,
+                Some(uid),
+                None,
+            );
+            assert!(report.foundation_ready);
+            assert_eq!(report.api34_shell(), expected);
         }
     }
 

@@ -10,6 +10,9 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md), [PLANO.md](PLANO.md) and the relevant i
 - Keep `main.rs` small, typed errors in the library and feature code independently testable.
 - Isolate FFI with safe wrappers, ownership, documented thread rules and `SAFETY` comments.
 - Bound queues, allocations and waits. Do not assume a synchronous Binder call is cancellable.
+- `src/binder/native.rs` owns the API 34 probe C ABI. Resolve platform exports at runtime;
+  add each new signature with pinned source and ownership evidence. Probe success only
+  proves lookup/ping, not automation registration or hierarchy.
 - Report unavailable features honestly; a successful doctor check is not Binder compatibility.
 - Stdout is command data; errors/diagnostics go to stderr. Never log UI contents or secrets.
 
@@ -31,6 +34,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md), [PLANO.md](PLANO.md) and the relevant i
 `cargo test --locked`, and `python3 -m unittest discover -s tools -p 'test_*.py' -v`.
 
 For native changes run `python3 tools/build_android.py` with the pinned NDK and
-record API/ABI actually executed. Use a disposable emulator by default; respect
-existing physical-device authorization and never infer permission for an unrelated device.
+record API/ABI actually executed. For Binder use the bounded `binder-probe` session
+and `tools/binder_inventory.py`; never run platform calls on an unvalidated profile.
+Use a disposable emulator by default; respect existing physical-device authorization and never infer permission for an unrelated device.
 Record checks and evidence in the PR. Build artifacts belong in ignored `dist/`/`target/`.

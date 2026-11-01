@@ -63,3 +63,15 @@ fn json_report_remains_one_document_when_environment_is_unavailable() {
         assert!(report["android_api"].is_null());
     }
 }
+
+#[cfg(not(target_os = "android"))]
+#[test]
+fn binder_probe_reports_unsupported_host_without_claiming_hierarchy() {
+    let output = command(&["binder-probe"]);
+    assert_eq!(output.status.code(), Some(69));
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["outcome"]["status"], "unsupported_target");
+    assert!(report["outcome"]["symbols"].as_array().unwrap().is_empty());
+    assert!(report["outcome"]["lookups"].as_array().unwrap().is_empty());
+    assert_eq!(report["hierarchy_available"], false);
+}
