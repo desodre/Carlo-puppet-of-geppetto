@@ -111,7 +111,7 @@ execução. Alinhamento ELF não equivale a teste em kernel com páginas de 16 K
 A sessão recusa aparelho físico por padrão, valida API/ABI/hash e executa em
 diretório exclusivo, removido ao terminar. `--allow-physical` exige autorização
 prévia para esse aparelho. Os comandos disponíveis são `doctor`, `version`,
-`binder-probe`, `accessibility-probe`, `accessibility-hold` e `serve`; use
+`binder-probe`, `accessibility-probe`, `accessibility-hold`, `node-query-probe` e `serve`; use
 `--report` para salvar evidência JSON e `--timeout` para prazo limitado.
 Smoke test em emulador já iniciado:
 
@@ -156,6 +156,19 @@ SIGTERM solicitam cleanup; o host mantém timeout para chamadas Binder presas.
 `hierarchy_available` continua `false`: conexão inicializada não significa leitura
 de nós. [Plano aplicado](docs/plans/p1-accessibility-session.md),
 [contratos e prova da sessão](docs/validation/p1-session.md).
+
+`node-query-probe` consulta a raiz da janela ativa e recebe o callback nativo:
+
+```sh
+python3 tools/android_session.py --serial emulator-5554 --command node-query-probe
+```
+
+Retorna somente presença, tamanho opaco e `interaction_id`; `fields_decoded=false`.
+Não entrega texto, bounds ou XML: decoder pertence à #23. Resultado nulo é diferente
+de `query_rejected` (janela/permissão/estado remoto não distinguíveis nesta resposta).
+Após ativar a sessão, a janela pode ainda não estar disponível; a prova informa a
+rejeição sem retry automático. Deadline de callback: 5 s; host cobre Binder preso.
+[Plano #22](docs/plans/p1-node-query.md) e [evidência](docs/validation/p1-node-query.md).
 
 Códigos do agente: 0 sucesso, 64 argumentos inválidos, 69 indisponível, 74 I/O/JSON.
 Timeout do helper retorna 124. Detalhes em [CONTRIBUTING.md](CONTRIBUTING.md).

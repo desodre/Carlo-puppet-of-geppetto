@@ -1,0 +1,16 @@
+{
+  "serial": "emulator-5590",
+  "emulator": true,
+  "android_api": 34,
+  "abi": "x86_64",
+  "session_directory": "/data/local/tmp/carlo-1a9ce2713088484b9213f7ebe0212cb3",
+  "command": [
+    "accessibility-probe",
+    "--hold-ms",
+    "10000"
+  ],
+  "cleanup_removed": true,
+  "exit_code": 137,
+  "stdout": "",
+  "stderr": "Killed \n"
+}

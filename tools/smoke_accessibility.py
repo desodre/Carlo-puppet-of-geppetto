@@ -128,9 +128,9 @@ def main():
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     native = run_session(adb, args.test_manifest.resolve(), "accessibility-tests", 60, False)
+    (output / "native-tests.json").write_text(json.dumps(native, indent=2) + "\n")
     if native["exit_code"] != 0 or "CARLO_RESOURCE_CYCLES " not in native["stdout"]:
         raise SessionError("native tests failed or resource-cycle test did not execute")
-    (output / "native-tests.json").write_text(json.dumps(native, indent=2) + "\n")
     for signal in ["TERM", "INT", "KILL"]:
         held_case(adb, args.manifest.resolve(), signal, output)
     timeout = run_session(adb, args.manifest.resolve(), "accessibility-hold", 0.2, False)

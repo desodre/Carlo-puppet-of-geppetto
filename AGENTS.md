@@ -19,6 +19,9 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md), [PLANO.md](PLANO.md) and the relevant i
 - After starting callbacks, keep the API table, class metadata and pool alive for
   the process lifetime. Release all per-session parcels/Binder refs with RAII.
   Close callback state before unregister; known conflict must not unregister others.
+- `node-query-probe` observes only the bounded callback envelope; opaque payloads
+  are never decoded nodes. Each request owns isolated callback state and a deadline;
+  the target app may call this Binder capability directly (not only system UID).
 - Report unavailable features honestly; a successful doctor check is not Binder compatibility.
 - Stdout is command data; errors/diagnostics go to stderr. Never log UI contents or secrets.
 

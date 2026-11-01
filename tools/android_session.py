@@ -19,6 +19,7 @@ COMMANDS = {
     "version": ["--version"],
     "serve": ["serve"],
     "binder-probe": ["binder-probe"],
+    "node-query-probe": ["node-query-probe"],
     "accessibility-tests": ["--test-threads=1", "--nocapture"],
     "accessibility-probe": ["accessibility-probe"],
     "accessibility-hold": ["accessibility-probe", "--hold-ms", "10000"],

@@ -2,6 +2,8 @@
 //! the dlopen handle in a static prevents callbacks into unloaded code. Per-session
 //! references/parcels/state still use RAII; no unbounded queues or worker creation.
 
+mod query;
+
 use super::{
     Error, Outcome, contract,
     state::{InitReader, Slot, decode_init},
@@ -40,6 +42,8 @@ type OnTransact = unsafe extern "C" fn(*mut Binder, u32, *const Parcel, *mut Par
 struct Api {
     _library: Library,
     check: unsafe extern "C" fn(*const c_char) -> *mut Binder,
+    retain: unsafe extern "C" fn(*mut Binder),
+    set_position: unsafe extern "C" fn(*const Parcel, i32) -> i32,
     release: unsafe extern "C" fn(*mut Binder),
     define: unsafe extern "C" fn(*const c_char, OnCreate, OnDestroy, OnTransact) -> *mut Class,
     associate: unsafe extern "C" fn(*mut Binder, *const Class) -> bool,
@@ -95,6 +99,11 @@ impl Api {
             check: symbol!(
                 c"AServiceManager_checkService",
                 unsafe extern "C" fn(*const c_char) -> *mut Binder
+            ),
+            retain: symbol!(c"AIBinder_incStrong", unsafe extern "C" fn(*mut Binder)),
+            set_position: symbol!(
+                c"AParcel_setDataPosition",
+                unsafe extern "C" fn(*const Parcel, i32) -> i32
             ),
             release: symbol!(c"AIBinder_decStrong", unsafe extern "C" fn(*mut Binder)),
             define: symbol!(
@@ -248,6 +257,12 @@ impl OwnedParcel {
             (self.api.write_binder)(self.pointer.as_ptr(), value.pointer.as_ptr())
         })
     }
+    fn long(&mut self, value: i64) -> Result<(), Error> {
+        // SAFETY: live uniquely owned parcel; fixed C ABI from the pinned NDK header.
+        status("write_long", unsafe {
+            (self.api.write_long)(self.pointer.as_ptr(), value)
+        })
+    }
     fn info(&mut self) -> Result<(), Error> {
         self.int(1)?; // typed-object presence flag, before service info data
         for field in contract::SERVICE_INFO {
@@ -270,6 +285,9 @@ impl OwnedParcel {
         Ok(())
     }
     fn call(self, target: &Strong, code: u32, operation: &'static str) -> Result<(), Error> {
+        self.reply(target, code, operation).map(|_| ())
+    }
+    fn reply(self, target: &Strong, code: u32, operation: &'static str) -> Result<Self, Error> {
         let api = self.api;
         let mut input = self.pointer.as_ptr();
         std::mem::forget(self); // transact always consumes and nulls the input slot
@@ -302,7 +320,7 @@ impl OwnedParcel {
         // SAFETY: owned AStatus is alive; reading its code does not transfer it.
         let exception = unsafe { (api.exception)(owned.0) };
         if exception == 0 {
-            Ok(())
+            Ok(reply)
         } else if operation == "register" && exception == -5 {
             Err(Error::Conflict)
         } else {
@@ -492,6 +510,8 @@ struct Classes {
     manager: NonNull<Class>,
     owner: NonNull<Class>,
     client: NonNull<Class>,
+    connection: NonNull<Class>,
+    result: NonNull<Class>,
 }
 // SAFETY: NDK class descriptors/callbacks are immutable metadata, valid until
 // process exit. The API is static and class pointers are never freed or mutated.
@@ -510,6 +530,14 @@ impl Classes {
                         .ok_or(Error::Runtime("define_class_returned_null"))
                 };
                 Ok(Self {
+                    connection: define(c"android.accessibilityservice.IAccessibilityServiceConnection", ignore)?,
+                    result: {
+                        // SAFETY: static descriptor and ABI callbacks, process-lived metadata.
+                        NonNull::new(unsafe { (api.define)(
+                            c"android.view.accessibility.IAccessibilityInteractionConnectionCallback".as_ptr(),
+                            create, query::destroy, query::callback,
+                        ) }).ok_or(Error::Runtime("define_query_class_returned_null"))?
+                    },
                     manager: define(c"android.view.accessibility.IAccessibilityManager", ignore)?,
                     owner: define(c"org.geppetto.carlo.Owner", ignore)?,
                     client: define(
@@ -561,6 +589,7 @@ struct Session {
     client: Strong,
     shared: Arc<Shared>,
     cleanup_due: bool,
+    query_ids: super::query::Ids,
 }
 impl Session {
     fn open() -> Result<Self, Error> {
@@ -584,6 +613,7 @@ impl Session {
             client,
             shared,
             cleanup_due: false,
+            query_ids: super::query::Ids::default(),
         })
     }
     fn register(&mut self) -> Result<(), Error> {
@@ -659,7 +689,12 @@ impl Drop for Signals {
     }
 }
 
+#[cfg(test)]
 pub(super) fn probe(hold_ms: u32) -> Outcome {
+    probe_mode(hold_ms, false)
+}
+
+pub(super) fn probe_mode(hold_ms: u32, query_node: bool) -> Outcome {
     static EXCLUSIVE: Mutex<()> = Mutex::new(());
     let Ok(_exclusive) = EXCLUSIVE.try_lock() else {
         return Outcome {
@@ -691,6 +726,16 @@ pub(super) fn probe(hold_ms: u32) -> Outcome {
         Ok(id) => {
             outcome.initialized = true;
             outcome.connection_id = Some(id);
+            if query_node {
+                match session.query_node(
+                    contract::ACTIVE_WINDOW,
+                    contract::ROOT_NODE,
+                    Duration::from_secs(5),
+                ) {
+                    Ok(envelope) => outcome.query = Some(envelope),
+                    Err(error) => outcome.error = Some(error),
+                }
+            }
             let deadline = Instant::now() + Duration::from_millis(u64::from(hold_ms));
             while !STOP.load(Ordering::Relaxed) && Instant::now() < deadline {
                 std::thread::sleep(

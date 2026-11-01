@@ -272,6 +272,16 @@
     {
       "symbol": "ABinderProcess_startThreadPool",
       "rust_c_abi_signature": "unsafe extern C fn()"
+    },
+    {
+      "symbol": "AIBinder_incStrong",
+      "ownership": "One retained strong reference is paired with decStrong after query.",
+      "rust_c_abi_signature": "unsafe extern C fn(*mut Binder)"
+    },
+    {
+      "symbol": "AParcel_setDataPosition",
+      "ownership": "Borrowed parcel, checked aligned in-bounds cursor; no ownership transfer.",
+      "rust_c_abi_signature": "unsafe extern C fn(*const Parcel, i32) -> i32"
     }
   ],
   "ndk_parcel_header": {
@@ -391,21 +401,99 @@
       "path": "libs/binder/ndk/include_ndk/android/binder_status.h",
       "sha256": "33cc1cca381979c0819ebf1ff07dcee85d767e4abee46bb982e533b6b4580858",
       "url": "https://android.googlesource.com/platform/frameworks/native/+/bfcf75076e562945bae131a4929f29a90d0d2481/libs/binder/ndk/include_ndk/android/binder_status.h"
+    },
+    {
+      "repository": "platform/frameworks/base",
+      "revision": "299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368",
+      "path": "core/java/android/view/accessibility/IAccessibilityInteractionConnectionCallback.aidl",
+      "sha256": "1ab8a4762f3e28291830c672fd06c199d0205cd62f24169449edc8b6645967c8",
+      "url": "https://android.googlesource.com/platform/frameworks/base/+/299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368/core/java/android/view/accessibility/IAccessibilityInteractionConnectionCallback.aidl"
+    },
+    {
+      "repository": "platform/frameworks/base",
+      "revision": "299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368",
+      "path": "core/java/android/view/accessibility/AccessibilityNodeInfo.java",
+      "sha256": "6b6656763aec9529b0474a2d9f0ea749f9041ad0d39977cb25c9543e95f011de",
+      "url": "https://android.googlesource.com/platform/frameworks/base/+/299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368/core/java/android/view/accessibility/AccessibilityNodeInfo.java"
+    },
+    {
+      "repository": "platform/frameworks/base",
+      "revision": "299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368",
+      "path": "core/java/android/view/accessibility/AccessibilityWindowInfo.java",
+      "sha256": "823d923c7d7e241c53f11df80de0c1766f578e6f435917b5d8f9c4b73f088ef9",
+      "url": "https://android.googlesource.com/platform/frameworks/base/+/299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368/core/java/android/view/accessibility/AccessibilityWindowInfo.java"
+    },
+    {
+      "repository": "platform/frameworks/base",
+      "revision": "299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368",
+      "path": "core/java/android/view/AccessibilityInteractionController.java",
+      "sha256": "b7a561d6927039f1cdbd7d256ca6ccaa33012e30228d0444d375174211ef0c32",
+      "url": "https://android.googlesource.com/platform/frameworks/base/+/299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368/core/java/android/view/AccessibilityInteractionController.java"
+    },
+    {
+      "repository": "platform/frameworks/base",
+      "revision": "299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368",
+      "path": "services/accessibility/java/com/android/server/accessibility/AbstractAccessibilityServiceConnection.java",
+      "sha256": "432fb65131e2fe6b532a3b55a85ff2ad275f02f30d96a2ad47bb0c4b75fe2342",
+      "url": "https://android.googlesource.com/platform/frameworks/base/+/299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368/services/accessibility/java/com/android/server/accessibility/AbstractAccessibilityServiceConnection.java"
+    },
+    {
+      "repository": "platform/frameworks/base",
+      "revision": "299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368",
+      "path": "services/accessibility/java/com/android/server/accessibility/AccessibilityWindowManager.java",
+      "sha256": "e3d050ca0a3a46b1b42d7b099869a0c670444bf3f9361d15481de0357fd220ff",
+      "url": "https://android.googlesource.com/platform/frameworks/base/+/299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368/services/accessibility/java/com/android/server/accessibility/AccessibilityWindowManager.java"
+    },
+    {
+      "repository": "platform/frameworks/base",
+      "revision": "299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368",
+      "path": "services/accessibility/java/com/android/server/accessibility/AccessibilitySecurityPolicy.java",
+      "sha256": "eaaba8541ff6d1b2f1cf75cfda1273b7dd7496b1b61dc2358ec8b7198e076f5e",
+      "url": "https://android.googlesource.com/platform/frameworks/base/+/299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368/services/accessibility/java/com/android/server/accessibility/AccessibilitySecurityPolicy.java"
     }
   ],
   "test_only_ffi_bindings": [
     {
       "symbol": "AParcel_create",
       "rust_c_abi_signature": "unsafe extern C fn() -> *mut Parcel"
-    },
-    {
-      "symbol": "AParcel_setDataPosition",
-      "rust_c_abi_signature": "unsafe extern C fn(*const Parcel, i32) -> i32"
     }
   ],
   "c_callback_signatures": {
     "onCreate": "unsafe extern C fn(*mut c_void) -> *mut c_void",
     "onDestroy": "unsafe extern C fn(*mut c_void)",
     "onTransact": "unsafe extern C fn(*mut Binder, u32, *const Parcel, *mut Parcel) -> i32"
+  },
+  "node_query": {
+    "connection_descriptor": "android.accessibilityservice.IAccessibilityServiceConnection",
+    "transaction": 3,
+    "flags": 0,
+    "arguments": [
+      "i32 windowId=2147483647 (active)",
+      "i64 nodeId=-2147483650 (root)",
+      "i32 interactionId > 0",
+      "strong Binder per-request callback",
+      "i32 flags=0 (no prefetch)",
+      "i64 native gettid()",
+      "i32 typed Bundle presence=0"
+    ],
+    "reply": "Java status then nullable String[]; null is ambiguous rejection (permission/window/remote state), not a null-node callback. Package names are unused; count and total reply size bounded, strings not allocated.",
+    "callback_descriptor": "android.view.accessibility.IAccessibilityInteractionConnectionCallback",
+    "callback_transaction": 1,
+    "callback_oneway": true,
+    "callback_arguments": [
+      "i32 nullable presence",
+      "opaque AccessibilityNodeInfo if present",
+      "i32 interactionId"
+    ],
+    "callback_authority": "Unpublished per-request Binder capability forwarded to target app by accessibility service; not restricted to system UID.",
+    "envelope_only": true,
+    "node_fields_validated": false,
+    "payload_copied_or_logged": false,
+    "maximum_parcel_bytes": 65536,
+    "deadline_ms": 5000,
+    "in_flight_per_session": 1,
+    "id_reuse": false,
+    "synchronous_dispatch_cancellable": false,
+    "fields_decoder_issue": 23
   }
 }
