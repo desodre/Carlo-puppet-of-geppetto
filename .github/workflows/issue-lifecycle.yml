@@ -1,0 +1,25 @@
+name: Issue lifecycle
+
+on:
+  issues:
+    types: [closed, reopened]
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: issue-lifecycle-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  parents:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Reconcile native parent and child issue states
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/issue_lifecycle.py

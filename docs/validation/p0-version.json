@@ -1,0 +1,14 @@
+{
+  "serial": "emulator-5580",
+  "emulator": true,
+  "android_api": 34,
+  "abi": "x86_64",
+  "session_directory": "/data/local/tmp/carlo-4b878edd2f014431b75318e3f09bb002",
+  "command": [
+    "--version"
+  ],
+  "cleanup_removed": true,
+  "exit_code": 0,
+  "stdout": "carlo 0.1.0\n",
+  "stderr": ""
+}

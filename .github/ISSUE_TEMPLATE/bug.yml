@@ -1,0 +1,24 @@
+name: Bug report
+description: Reproducible incorrect behavior
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction and expected behavior
+      description: Commands, observed result and expected result. Remove UI text and credentials.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Carlo version, Android API, ABI, device/emulator and relevant doctor checks.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Redacted logs, exit code and minimal failing input, if applicable.

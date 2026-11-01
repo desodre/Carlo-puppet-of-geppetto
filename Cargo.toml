@@ -1,6 +1,24 @@
 [package]
-name = "Carlo"
+name = "carlo"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.96"
+description = "Native Android hierarchy and video agent for Geppetto"
+repository = "https://github.com/desodre/Carlo-puppet-of-geppetto"
+publish = false
 
 [dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+missing_docs = "warn"
+
+[lints.clippy]
+undocumented_unsafe_blocks = "deny"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "debuginfo"

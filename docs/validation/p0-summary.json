@@ -1,0 +1,22 @@
+[
+  {
+    "command": "doctor",
+    "exit_code": 0,
+    "cleanup_removed": true
+  },
+  {
+    "command": "version",
+    "exit_code": 0,
+    "cleanup_removed": true
+  },
+  {
+    "command": "serve",
+    "exit_code": 69,
+    "cleanup_removed": true
+  },
+  {
+    "command": "slow fixture",
+    "exit_code": 124,
+    "cleanup_removed": true
+  }
+]
