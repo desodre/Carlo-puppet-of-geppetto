@@ -20,6 +20,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md), [PLANO.md](PLANO.md) and the relevant i
 - Work on a linked `codex/<type>/<slug>-<issue>` branch from `main`.
 - Group subissues only for a cohesive deliverable and reference each implemented issue in the PR.
 - Use `Closes #<child>` for accepted complete work; `Refs #<parent>` until full stage acceptance.
+- A PR delivering an entire validated stage may close its parent and all children; merge is stage acceptance.
 - Move implemented work to Em revisão while awaiting PR review/merge; do not claim it integrated.
 - Conventional Commits in English; do not merge, tag or publish without maintainer request.
 - Preserve user changes and update roadmap links/docs when architecture or workflow changes.

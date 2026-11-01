@@ -27,9 +27,10 @@ explicitamente. Branch planejada no texto não significa branch já criada.
 Use Conventional Commits em inglês e referência à issue, por exemplo:
 `feat(cli): add native foundation diagnostics (refs #15, #16)`.
 
-O PR deve explicar comportamento, validação e limitações. Use `Closes #N` apenas
-para subissues implementadas integralmente; `Refs #N` para a etapa pai e trabalhos
-parciais. Merge em `main` fecha as subissues referenciadas pelo mecanismo do GitHub.
+O PR deve explicar comportamento, validação e limitações. Use `Closes #N` para subissues implementadas integralmente e `Refs #N` para a
+etapa pai em entregas parciais. Um PR que implemente toda a etapa, valide seu
+critério completo e cubra todas as filhas pode também usar `Closes #<pai>`; nesse
+caso, o merge representa o aceite da etapa. Merge em `main` fecha as subissues referenciadas pelo mecanismo do GitHub.
 Não faça push direto para `main`; merge, tags e publicação dependem do mantenedor.
 
 ## Estados e labels
