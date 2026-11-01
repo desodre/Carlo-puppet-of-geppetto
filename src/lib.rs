@@ -54,6 +54,18 @@ pub fn run(command: Command, output: &mut impl Write) -> Result<(), CarloError> 
                 ))
             }
         }
+        Command::NodeQueryProbe => {
+            let report = accessibility::collect_node()?;
+            serde_json::to_writer_pretty(&mut *output, &report)?;
+            writeln!(output).map_err(CarloError::output)?;
+            if report.passed() {
+                Ok(())
+            } else {
+                Err(CarloError::UnsupportedFeature(
+                    "node query proof did not pass; see JSON report",
+                ))
+            }
+        }
         Command::BinderProbe => {
             let report = binder::BinderProbe::collect()?;
             serde_json::to_writer_pretty(&mut *output, &report)?;

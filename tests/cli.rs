@@ -106,3 +106,22 @@ fn accessibility_hold_is_bounded_and_invalid_values_are_not_echoed() {
         );
     }
 }
+
+#[cfg(not(target_os = "android"))]
+#[test]
+fn node_query_is_profile_guarded_and_never_advertises_decoded_hierarchy() {
+    let output = command(&["node-query-probe"]);
+    assert_eq!(output.status.code(), Some(69));
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["outcome"]["error"]["kind"], "unsupported_profile");
+    assert_eq!(report["hierarchy_available"], false);
+    assert!(report["outcome"].get("query").is_none());
+    let invalid = command(&["node-query-probe", "sensitive-value"]);
+    assert_eq!(invalid.status.code(), Some(64));
+    assert!(invalid.stdout.is_empty());
+    assert!(
+        !String::from_utf8(invalid.stderr)
+            .unwrap()
+            .contains("sensitive-value")
+    );
+}

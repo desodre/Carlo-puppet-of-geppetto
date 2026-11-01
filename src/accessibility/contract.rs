@@ -4,6 +4,10 @@ pub(super) const FINGERPRINT: &str =
     "google/sdk_gphone64_x86_64/emu64xa:14/UE1A.230829.050/12077443:userdebug/dev-keys";
 pub(super) const REGISTER: u32 = 10;
 pub(super) const UNREGISTER: u32 = 11;
+pub(super) const FIND_NODE: u32 = 3;
+pub(super) const NODE_RESULT: u32 = 1;
+pub(super) const ACTIVE_WINDOW: i32 = i32::MAX;
+pub(super) const ROOT_NODE: i64 = -2147483650; // makeNodeId(MAX_VALUE - 1, HOST_VIEW_ID=-1)
 pub(super) const INIT: u32 = 1;
 pub(super) const INTERRUPT: u32 = 3;
 pub(super) const CLEAR_CACHE: u32 = 5;

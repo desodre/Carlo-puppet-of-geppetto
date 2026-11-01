@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add reference-profile `node-query-probe`: one active-root request, isolated callback,
+  interaction-ID correlation, bounded envelope/deadline and explicit null/rejection
+  results. Node fields remain undecoded (#23); hierarchy capability stays unavailable.
+- Cover stale/duplicate/expired callbacks, invalid NDK envelopes and repeated real
+  queries with resource/lifecycle checks. Preserve native test reports on failure.
+
 - Add the reference API 34 x86_64 accessibility session proof: versioned contracts,
   bounded Binder callbacks/pool, minimal ServiceInfo registration and connection init.
 - Add idempotent unregister, safe conflict refusal, SIGINT/SIGTERM cleanup and

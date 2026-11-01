@@ -1,4 +1,4 @@
-//! Reference-profile session proof. No node queries or UI payload logging.
+//! Reference-profile session and query-envelope proofs. No decoded UI payload logging.
 
 #![cfg_attr(
     not(target_os = "android"),
@@ -14,6 +14,7 @@ use serde::Serialize;
 mod contract;
 #[cfg(target_os = "android")]
 mod native;
+mod query;
 mod state;
 
 /// Failures retain status codes and fixed operation names, never remote message text.
@@ -33,6 +34,9 @@ pub(crate) enum Error {
     },
     Conflict,
     InitializationTimeout,
+    QueryTimeout,
+    QueryRejected,
+    QueryIdExhausted,
     InvalidCallback,
     Cancelled,
     Runtime(&'static str),
@@ -47,6 +51,8 @@ pub(crate) struct Outcome {
     callbacks: state::Counters,
     error: Option<Error>,
     cleanup_error: Option<Error>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    query: Option<query::Envelope>,
 }
 
 #[derive(Debug, Serialize)]
@@ -73,6 +79,15 @@ pub(crate) fn collect(hold_ms: u32) -> Result<Report, CarloError> {
             "hold must be 0..10000 milliseconds",
         ));
     }
+    collect_mode(hold_ms, false)
+}
+
+pub(crate) fn collect_node() -> Result<Report, CarloError> {
+    collect_mode(0, true)
+}
+
+#[cfg_attr(not(target_os = "android"), allow(unused_variables))]
+fn collect_mode(hold_ms: u32, query: bool) -> Result<Report, CarloError> {
     let environment = Diagnostics::collect()?;
     let fingerprint = fingerprint()?;
     let supported = contract::supported(
@@ -83,7 +98,7 @@ pub(crate) fn collect(hold_ms: u32) -> Result<Report, CarloError> {
     let outcome = if supported {
         #[cfg(target_os = "android")]
         {
-            native::probe(hold_ms)
+            native::probe_mode(hold_ms, query)
         }
         #[cfg(not(target_os = "android"))]
         {

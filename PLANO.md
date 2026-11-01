@@ -2,7 +2,8 @@
 
 Data do plano: 2026-10-31. Estado: P0 integrado; provas de lookup Binder e
 registro/init/unregister em API 34 x86_64. Projeto Rust 2024, versão 0.1.0, CLI e cross-builds Android.
-Hierarquia, captura e protocolo seguem pendentes.
+Consulta/callback de nó tem prova de envelope (#22); campos do nó (#23),
+hierarquia, captura e protocolo seguem pendentes.
 [Evidência P1.1](docs/validation/p1-1-binder.md) e
 [plano aplicado para sessão nativa](docs/plans/p1-accessibility-session.md).
 
