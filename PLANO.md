@@ -1,7 +1,9 @@
 # Carlo — plano inicial de implementação
 
-Data: 2026-10-31. Estado: arquitetura escolhida; implementação ainda não iniciada.
-Projeto atual: executável Rust 2024, versão 0.1.0, sem dependências e com `Hello, world!`.
+Data do plano: 2026-10-31. Estado: P0 integrado; P1.1 com prova de lookup/ping Binder
+API 34 x86_64. Projeto Rust 2024, versão 0.1.0, CLI e cross-builds Android.
+Hierarquia, captura e protocolo seguem pendentes.
+[Evidência e decisão P1.1](docs/validation/p1-1-binder.md).
 
 ## Objetivo e limites
 

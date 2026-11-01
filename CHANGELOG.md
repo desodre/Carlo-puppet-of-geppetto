@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add API 34 shell `binder-probe`: dynamically resolve four C Binder exports,
+  lookup/ping accessibility, test a null control lookup and release strong refs
+  before unloading the library. Report unsupported targets and failures as JSON.
+- Add reproducible system/public-NDK symbol inventory and P1.1 source/decision
+  evidence; keep hierarchy unavailable until registration and parcel proofs pass.
+
 - Add issue lifecycle policy, labels, native parent/subissue tracking, linked-branch
   workflow, issue/PR templates, CI and parent acceptance automation.
 - Add the initial `carlo` CLI: help, version and native environment diagnostics in

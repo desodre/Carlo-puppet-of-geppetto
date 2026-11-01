@@ -6,10 +6,10 @@ Agente Android nativo em Rust para fornecer **hierarquia de interface** e
 **streaming de vídeo** ao [Geppetto](https://github.com/desodre/Geppetto).
 Arquitetura escolhida: Binder + NDK, executando como usuário `shell` por meio do ADB.
 
-**Estado atual:** fundação nativa P0. CLI, diagnóstico e builds Android estão
-disponíveis; hierarquia, captura e protocolo
-ainda não estão implementados. Versão de desenvolvimento: `0.1.0`, sem release
-publicada do agente completo.
+**Estado atual:** P0 integrado e prova P1.1 de lookup/ping Binder validada no
+emulador API 34 x86_64. CLI, diagnóstico e builds Android disponíveis; hierarquia,
+captura e protocolo ainda não estão implementados. Versão de desenvolvimento:
+`0.1.0`, sem release publicada do agente completo.
 
 ## Propósito
 
@@ -70,7 +70,7 @@ com Geppetto. Vídeo sintético isolado não comprova captura da tela.
 
 | Alvo | Papel no desenvolvimento | Estado |
 |---|---|---|
-| Android 14/API 34, x86_64 | Primeira referência em emulador | A implementar |
+| Android 14/API 34, x86_64 | Primeira referência em emulador | Fundação e lookup/ping Binder validados |
 | arm64 em dispositivo físico | Validação em dispositivo físico | A validar após primeira referência |
 | APIs 35 e 36 | Próximos perfis de compatibilidade | Planejado |
 | APIs 29–33 | Avaliação posterior de viabilidade | Sem suporte anunciado |
@@ -109,8 +109,9 @@ execução. Alinhamento ELF não equivale a teste em kernel com páginas de 16 K
 
 A sessão recusa aparelho físico por padrão, valida API/ABI/hash e executa em
 diretório exclusivo, removido ao terminar. `--allow-physical` exige autorização
-prévia para esse aparelho. Os comandos disponíveis são `doctor`, `version` e
-`serve`; use `--report` para salvar evidência JSON e `--timeout` para prazo limitado.
+prévia para esse aparelho. Os comandos disponíveis são `doctor`, `version`,
+`binder-probe` e `serve`; use `--report` para salvar evidência JSON e `--timeout`
+para prazo limitado.
 Smoke test em emulador já iniciado:
 
 ```sh
@@ -120,6 +121,24 @@ python3 tools/smoke_android.py --serial emulator-5554 \
 
 [Evidência de P0](docs/validation/p0-2026-10-31.md) distingue execução x86_64 de
 cross-build arm64.
+
+A prova Binder resolve quatro funções C de `libbinder_ndk.so`, consulta
+`accessibility`, faz ping e verifica um nome de controle ausente. Executa somente
+em Android API 34 sob UID 2000. Usa FFI mínima, sem dependências novas; a API de
+ServiceManager é de plataforma e não faz parte do stub público do NDK.
+
+```sh
+python3 tools/android_session.py --serial emulator-5554 --command binder-probe \
+  --timeout 15 --report results/binder-probe.json
+python3 tools/binder_inventory.py --serial emulator-5554 \
+  --output results/binder-symbols.json
+```
+
+`binder-probe` emite resultado em JSON: retorna 0 para a prova completa de lookup/ping,
+69 para alvo, biblioteca, símbolos ou serviços indisponíveis. `hierarchy_available`
+continua `false`. Chamadas Binder síncronas dependem do timeout do helper para
+encerramento forçado; o comando direto não oferece cancelamento interno.
+[Decisão, fontes e evidência P1.1](docs/validation/p1-1-binder.md).
 
 Códigos do agente: 0 sucesso, 64 argumentos inválidos, 69 indisponível, 74 I/O/JSON.
 Timeout do helper retorna 124. Detalhes em [CONTRIBUTING.md](CONTRIBUTING.md).

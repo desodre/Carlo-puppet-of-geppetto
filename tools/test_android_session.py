@@ -76,6 +76,14 @@ class SessionTests(unittest.TestCase):
         self.assertTrue(result["cleanup_removed"])
         self.assertTrue(any(len(call) > 3 and call[3] == "carlo-cleanup" for call in adb.calls))
 
+    def test_binder_probe_uses_bounded_launch_and_existing_cleanup(self):
+        adb = FakeAdb()
+        result = run_session(adb, self.manifest, "binder-probe", 1, False)
+        self.assertEqual(result["command"], ["binder-probe"])
+        self.assertTrue(result["cleanup_removed"])
+        launch = next(call for call in adb.calls if call[:3] == ["sh", "-c", LAUNCH])
+        self.assertEqual(launch[-1], "binder-probe")
+
     def test_timeout_and_push_failure_both_clean_owned_directory(self):
         adb = FakeAdb(failure=subprocess.TimeoutExpired("adb", 1))
         result = run_session(adb, self.manifest, "doctor", 1, False)

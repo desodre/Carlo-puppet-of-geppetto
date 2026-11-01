@@ -40,6 +40,10 @@ jobs:
           ndk_version=$(python3 -c 'import json; print(json.load(open("android-build.json"))["ndk_version"])')
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;$ndk_version"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$ndk_version" >> "$GITHUB_ENV"
+      - name: Check Android-specific Rust paths
+        run: |
+          cargo clippy --locked --all-targets --target x86_64-linux-android -- -D warnings
+          cargo clippy --locked --all-targets --target aarch64-linux-android -- -D warnings
       - name: Build and verify both Android ABIs
         run: python3 tools/build_android.py
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

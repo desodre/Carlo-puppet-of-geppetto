@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run a bounded foundation command in a private, verified Android session."""
+"""Run a bounded native diagnostic command in a private, verified Android session."""
 
 from __future__ import annotations
 
@@ -14,7 +14,12 @@ import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-COMMANDS = {"doctor": ["doctor", "--json"], "version": ["--version"], "serve": ["serve"]}
+COMMANDS = {
+    "doctor": ["doctor", "--json"],
+    "version": ["--version"],
+    "serve": ["serve"],
+    "binder-probe": ["binder-probe"],
+}
 ABI_TARGETS = {"x86_64": "x86_64-linux-android", "arm64-v8a": "aarch64-linux-android"}
 
 # Caller data is passed as positional shell arguments, never interpolated as code.

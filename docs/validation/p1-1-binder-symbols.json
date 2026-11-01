@@ -1,0 +1,1066 @@
+{
+  "schema_version": 1,
+  "android_api": 34,
+  "abi": "x86_64",
+  "fingerprint": "google/sdk_gphone64_x86_64/emu64xa:14/UE1A.230829.050/12077443:userdebug/dev-keys",
+  "selinux_mode": "Enforcing",
+  "device_library": "/system/lib64/libbinder_ndk.so",
+  "device_library_sha256": "9d9a0b1b066f5af79ea373b0b03b119db41dff5bedf42364c49b9c3fc2176b57",
+  "device_library_bytes": 108552,
+  "ndk_version": "28.2.13676358",
+  "ndk_stub_sha256": "b3a88193df4316e9b4e73121df5a16af2babcb07246958deb8c903e4a8e52398",
+  "aosp_contract_reference": "bfcf75076e562945bae131a4929f29a90d0d2481",
+  "aosp_reference_is_image_source_provenance": false,
+  "device_exports": [
+    {
+      "name": "ABinderProcess_handlePolledCommands",
+      "version": "LIBBINDER_NDK31"
+    },
+    {
+      "name": "ABinderProcess_isThreadPoolStarted",
+      "version": "LIBBINDER_NDK34"
+    },
+    {
+      "name": "ABinderProcess_joinThreadPool",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "ABinderProcess_setThreadPoolMaxThreadCount",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "ABinderProcess_setupPolling",
+      "version": "LIBBINDER_NDK31"
+    },
+    {
+      "name": "ABinderProcess_startThreadPool",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_Class_define",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_Class_disableInterfaceTokenHeader",
+      "version": "LIBBINDER_NDK33"
+    },
+    {
+      "name": "AIBinder_Class_getDescriptor",
+      "version": "LIBBINDER_NDK31"
+    },
+    {
+      "name": "AIBinder_Class_setHandleShellCommand",
+      "version": "LIBBINDER_NDK30"
+    },
+    {
+      "name": "AIBinder_Class_setOnDump",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_DeathRecipient_delete",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_DeathRecipient_new",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_DeathRecipient_setOnUnlinked",
+      "version": "LIBBINDER_NDK33"
+    },
+    {
+      "name": "AIBinder_Weak_clone",
+      "version": "LIBBINDER_NDK31"
+    },
+    {
+      "name": "AIBinder_Weak_delete",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_Weak_lt",
+      "version": "LIBBINDER_NDK31"
+    },
+    {
+      "name": "AIBinder_Weak_new",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_Weak_promote",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_associateClass",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_debugGetRefCount",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_decStrong",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_dump",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_forceDowngradeToSystemStability",
+      "version": "LIBBINDER_NDK31"
+    },
+    {
+      "name": "AIBinder_forceDowngradeToVendorStability",
+      "version": "LIBBINDER_NDK31"
+    },
+    {
+      "name": "AIBinder_fromJavaBinder",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_getCallingPid",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_getCallingSid",
+      "version": "LIBBINDER_NDK31"
+    },
+    {
+      "name": "AIBinder_getCallingUid",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_getClass",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_getExtension",
+      "version": "LIBBINDER_NDK30"
+    },
+    {
+      "name": "AIBinder_getUserData",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_incStrong",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_isAlive",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_isHandlingTransaction",
+      "version": "LIBBINDER_NDK33"
+    },
+    {
+      "name": "AIBinder_isRemote",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_linkToDeath",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_lt",
+      "version": "LIBBINDER_NDK31"
+    },
+    {
+      "name": "AIBinder_markSystemStability",
+      "version": "LIBBINDER_NDK30"
+    },
+    {
+      "name": "AIBinder_markVendorStability",
+      "version": "LIBBINDER_NDK30"
+    },
+    {
+      "name": "AIBinder_markVintfStability",
+      "version": "LIBBINDER_NDK30"
+    },
+    {
+      "name": "AIBinder_new",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_ping",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_prepareTransaction",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_setExtension",
+      "version": "LIBBINDER_NDK30"
+    },
+    {
+      "name": "AIBinder_setInheritRt",
+      "version": "LIBBINDER_NDK33"
+    },
+    {
+      "name": "AIBinder_setMinSchedulerPolicy",
+      "version": "LIBBINDER_NDK33"
+    },
+    {
+      "name": "AIBinder_setRequestingSid",
+      "version": "LIBBINDER_NDK31"
+    },
+    {
+      "name": "AIBinder_toJavaBinder",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_transact",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_unlinkToDeath",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_appendFrom",
+      "version": "LIBBINDER_NDK31"
+    },
+    {
+      "name": "AParcel_create",
+      "version": "LIBBINDER_NDK31"
+    },
+    {
+      "name": "AParcel_delete",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_fromJavaParcel",
+      "version": "LIBBINDER_NDK30"
+    },
+    {
+      "name": "AParcel_getAllowFds",
+      "version": "LIBBINDER_NDK_PLATFORM"
+    },
+    {
+      "name": "AParcel_getDataPosition",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_getDataSize",
+      "version": "LIBBINDER_NDK31"
+    },
+    {
+      "name": "AParcel_markSensitive",
+      "version": "LIBBINDER_NDK31"
+    },
+    {
+      "name": "AParcel_marshal",
+      "version": "LIBBINDER_NDK33"
+    },
+    {
+      "name": "AParcel_readBool",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readBoolArray",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readByte",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readByteArray",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readChar",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readCharArray",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readDouble",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readDoubleArray",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readFloat",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readFloatArray",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readInt32",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readInt32Array",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readInt64",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readInt64Array",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readParcelFileDescriptor",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readParcelableArray",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readStatusHeader",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readString",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readStringArray",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readStrongBinder",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readUint32",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readUint32Array",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readUint64",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readUint64Array",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_reset",
+      "version": "LIBBINDER_NDK31"
+    },
+    {
+      "name": "AParcel_setDataPosition",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_unmarshal",
+      "version": "LIBBINDER_NDK33"
+    },
+    {
+      "name": "AParcel_writeBool",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeBoolArray",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeByte",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeByteArray",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeChar",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeCharArray",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeDouble",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeDoubleArray",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeFloat",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeFloatArray",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeInt32",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeInt32Array",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeInt64",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeInt64Array",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeParcelFileDescriptor",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeParcelableArray",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeStatusHeader",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeString",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeStringArray",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeStrongBinder",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeUint32",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeUint32Array",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeUint64",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeUint64Array",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AServiceManager_NotificationRegistration_delete",
+      "version": "LIBBINDER_NDK34"
+    },
+    {
+      "name": "AServiceManager_addService",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AServiceManager_addServiceWithFlags",
+      "version": "LIBBINDER_NDK34"
+    },
+    {
+      "name": "AServiceManager_checkService",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AServiceManager_forEachDeclaredInstance",
+      "version": "LIBBINDER_NDK31"
+    },
+    {
+      "name": "AServiceManager_forceLazyServicesPersist",
+      "version": "LIBBINDER_NDK31"
+    },
+    {
+      "name": "AServiceManager_getService",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AServiceManager_getUpdatableApexName",
+      "version": "LIBBINDER_NDK34"
+    },
+    {
+      "name": "AServiceManager_isDeclared",
+      "version": "LIBBINDER_NDK31"
+    },
+    {
+      "name": "AServiceManager_isUpdatableViaApex",
+      "version": "LIBBINDER_NDK31"
+    },
+    {
+      "name": "AServiceManager_reRegister",
+      "version": "LIBBINDER_NDK31"
+    },
+    {
+      "name": "AServiceManager_registerForServiceNotifications",
+      "version": "LIBBINDER_NDK34"
+    },
+    {
+      "name": "AServiceManager_registerLazyService",
+      "version": "LIBBINDER_NDK31"
+    },
+    {
+      "name": "AServiceManager_setActiveServicesCallback",
+      "version": "LIBBINDER_NDK31"
+    },
+    {
+      "name": "AServiceManager_tryUnregister",
+      "version": "LIBBINDER_NDK31"
+    },
+    {
+      "name": "AServiceManager_waitForService",
+      "version": "LIBBINDER_NDK31"
+    },
+    {
+      "name": "AStatus_delete",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AStatus_deleteDescription",
+      "version": "LIBBINDER_NDK30"
+    },
+    {
+      "name": "AStatus_fromExceptionCode",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AStatus_fromExceptionCodeWithMessage",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AStatus_fromServiceSpecificError",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AStatus_fromServiceSpecificErrorWithMessage",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AStatus_fromStatus",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AStatus_getDescription",
+      "version": "LIBBINDER_NDK30"
+    },
+    {
+      "name": "AStatus_getExceptionCode",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AStatus_getMessage",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AStatus_getServiceSpecificError",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AStatus_getStatus",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AStatus_isOk",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AStatus_newOk",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "_Z25AIBinder_toPlatformBinderP8AIBinder",
+      "version": "LIBBINDER_NDK_PLATFORM"
+    },
+    {
+      "name": "_Z26AParcel_viewPlatformParcelP7AParcel",
+      "version": "LIBBINDER_NDK_PLATFORM"
+    },
+    {
+      "name": "_Z26AParcel_viewPlatformParcelPK7AParcel",
+      "version": "LIBBINDER_NDK_PLATFORM"
+    },
+    {
+      "name": "_Z27AIBinder_fromPlatformBinderRKN7android2spINS_7IBinderEEE",
+      "version": "LIBBINDER_NDK_PLATFORM"
+    }
+  ],
+  "public_ndk_exports": [
+    {
+      "name": "AIBinder_Class_define",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_Class_disableInterfaceTokenHeader",
+      "version": "LIBBINDER_NDK33"
+    },
+    {
+      "name": "AIBinder_Class_getDescriptor",
+      "version": "LIBBINDER_NDK31"
+    },
+    {
+      "name": "AIBinder_Class_setOnDump",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_DeathRecipient_delete",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_DeathRecipient_new",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_DeathRecipient_setOnUnlinked",
+      "version": "LIBBINDER_NDK33"
+    },
+    {
+      "name": "AIBinder_Weak_clone",
+      "version": "LIBBINDER_NDK31"
+    },
+    {
+      "name": "AIBinder_Weak_delete",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_Weak_lt",
+      "version": "LIBBINDER_NDK31"
+    },
+    {
+      "name": "AIBinder_Weak_new",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_Weak_promote",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_associateClass",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_debugGetRefCount",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_decStrong",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_dump",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_fromJavaBinder",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_getCallingPid",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_getCallingUid",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_getClass",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_getExtension",
+      "version": "LIBBINDER_NDK30"
+    },
+    {
+      "name": "AIBinder_getUserData",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_incStrong",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_isAlive",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_isHandlingTransaction",
+      "version": "LIBBINDER_NDK33"
+    },
+    {
+      "name": "AIBinder_isRemote",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_linkToDeath",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_lt",
+      "version": "LIBBINDER_NDK31"
+    },
+    {
+      "name": "AIBinder_new",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_ping",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_prepareTransaction",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_setExtension",
+      "version": "LIBBINDER_NDK30"
+    },
+    {
+      "name": "AIBinder_toJavaBinder",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_transact",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AIBinder_unlinkToDeath",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_appendFrom",
+      "version": "LIBBINDER_NDK31"
+    },
+    {
+      "name": "AParcel_create",
+      "version": "LIBBINDER_NDK31"
+    },
+    {
+      "name": "AParcel_delete",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_fromJavaParcel",
+      "version": "LIBBINDER_NDK30"
+    },
+    {
+      "name": "AParcel_getDataPosition",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_getDataSize",
+      "version": "LIBBINDER_NDK31"
+    },
+    {
+      "name": "AParcel_marshal",
+      "version": "LIBBINDER_NDK33"
+    },
+    {
+      "name": "AParcel_readBool",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readBoolArray",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readByte",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readByteArray",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readChar",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readCharArray",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readDouble",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readDoubleArray",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readFloat",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readFloatArray",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readInt32",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readInt32Array",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readInt64",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readInt64Array",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readParcelFileDescriptor",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readParcelableArray",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readStatusHeader",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readString",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readStringArray",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readStrongBinder",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readUint32",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readUint32Array",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readUint64",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_readUint64Array",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_reset",
+      "version": "LIBBINDER_NDK31"
+    },
+    {
+      "name": "AParcel_setDataPosition",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_unmarshal",
+      "version": "LIBBINDER_NDK33"
+    },
+    {
+      "name": "AParcel_writeBool",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeBoolArray",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeByte",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeByteArray",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeChar",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeCharArray",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeDouble",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeDoubleArray",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeFloat",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeFloatArray",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeInt32",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeInt32Array",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeInt64",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeInt64Array",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeParcelFileDescriptor",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeParcelableArray",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeStatusHeader",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeString",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeStringArray",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeStrongBinder",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeUint32",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeUint32Array",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeUint64",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AParcel_writeUint64Array",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AStatus_delete",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AStatus_deleteDescription",
+      "version": "LIBBINDER_NDK30"
+    },
+    {
+      "name": "AStatus_fromExceptionCode",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AStatus_fromExceptionCodeWithMessage",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AStatus_fromServiceSpecificError",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AStatus_fromServiceSpecificErrorWithMessage",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AStatus_fromStatus",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AStatus_getDescription",
+      "version": "LIBBINDER_NDK30"
+    },
+    {
+      "name": "AStatus_getExceptionCode",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AStatus_getMessage",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AStatus_getServiceSpecificError",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AStatus_getStatus",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AStatus_isOk",
+      "version": "LIBBINDER_NDK"
+    },
+    {
+      "name": "AStatus_newOk",
+      "version": "LIBBINDER_NDK"
+    }
+  ],
+  "device_only_export_names": [
+    "ABinderProcess_handlePolledCommands",
+    "ABinderProcess_isThreadPoolStarted",
+    "ABinderProcess_joinThreadPool",
+    "ABinderProcess_setThreadPoolMaxThreadCount",
+    "ABinderProcess_setupPolling",
+    "ABinderProcess_startThreadPool",
+    "AIBinder_Class_setHandleShellCommand",
+    "AIBinder_forceDowngradeToSystemStability",
+    "AIBinder_forceDowngradeToVendorStability",
+    "AIBinder_getCallingSid",
+    "AIBinder_markSystemStability",
+    "AIBinder_markVendorStability",
+    "AIBinder_markVintfStability",
+    "AIBinder_setInheritRt",
+    "AIBinder_setMinSchedulerPolicy",
+    "AIBinder_setRequestingSid",
+    "AParcel_getAllowFds",
+    "AParcel_markSensitive",
+    "AServiceManager_NotificationRegistration_delete",
+    "AServiceManager_addService",
+    "AServiceManager_addServiceWithFlags",
+    "AServiceManager_checkService",
+    "AServiceManager_forEachDeclaredInstance",
+    "AServiceManager_forceLazyServicesPersist",
+    "AServiceManager_getService",
+    "AServiceManager_getUpdatableApexName",
+    "AServiceManager_isDeclared",
+    "AServiceManager_isUpdatableViaApex",
+    "AServiceManager_reRegister",
+    "AServiceManager_registerForServiceNotifications",
+    "AServiceManager_registerLazyService",
+    "AServiceManager_setActiveServicesCallback",
+    "AServiceManager_tryUnregister",
+    "AServiceManager_waitForService",
+    "_Z25AIBinder_toPlatformBinderP8AIBinder",
+    "_Z26AParcel_viewPlatformParcelP7AParcel",
+    "_Z26AParcel_viewPlatformParcelPK7AParcel",
+    "_Z27AIBinder_fromPlatformBinderRKN7android2spINS_7IBinderEEE"
+  ]
+}

@@ -9,6 +9,7 @@ Usage: carlo <command>
 
 Commands:
   doctor [--json]  Report environment and implemented capabilities
+  binder-probe     API 34 shell Binder/ServiceManager proof (JSON)
   serve            Reserved for P3; currently returns unavailable (69)
   --version, -V    Show the package version
   --help, -h       Show this help
@@ -29,6 +30,8 @@ pub enum Command {
         /// Emit a single JSON document on stdout.
         json: bool,
     },
+    /// Run the API 34 shell Binder proof, emitting JSON even on unavailability.
+    BinderProbe,
     /// Reserved entry point for the future session protocol.
     Serve,
 }
@@ -49,6 +52,7 @@ pub fn parse(arguments: impl IntoIterator<Item = String>) -> Result<Command, Car
         (Some("--version" | "-V"), None) => Ok(Command::Version),
         (Some("doctor"), None) => Ok(Command::Doctor { json: false }),
         (Some("doctor"), Some("--json")) => Ok(Command::Doctor { json: true }),
+        (Some("binder-probe"), None) => Ok(Command::BinderProbe),
         (Some("serve"), None) => Ok(Command::Serve),
         _ => Err(CarloError::InvalidArguments(
             "unknown command or option; use --help",
@@ -68,6 +72,7 @@ mod tests {
     fn rejects_options_that_could_be_silently_ignored() {
         for values in [
             vec!["serve", "--json"],
+            vec!["binder-probe", "--json"],
             vec!["doctor", "--json", "extra"],
             vec!["--version", "doctor"],
         ] {

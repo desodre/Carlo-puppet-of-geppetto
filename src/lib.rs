@@ -1,7 +1,8 @@
 //! Native Android agent foundations: command parsing, diagnostics and typed errors.
 //!
-//! Hierarchy, Binder integration, streaming and the serve protocol are not yet implemented.
+//! Binder lookup has an API 34 probe. Hierarchy, streaming and serve are not implemented.
 
+pub mod binder;
 pub mod cli;
 pub mod diagnostics;
 pub mod error;
@@ -16,8 +17,8 @@ use error::CarloError;
 ///
 /// # Errors
 /// Returns [`CarloError`] for I/O/serialization failures, an unsuitable foundation
-/// environment, or the currently unimplemented `serve` command. Doctor writes its
-/// report before returning an unsuitable-environment error.
+/// environment, an unsuccessful Binder probe, or the unimplemented `serve` command.
+/// Doctor and Binder probe write their reports before returning unavailable errors.
 pub fn run(command: Command, output: &mut impl Write) -> Result<(), CarloError> {
     match command {
         Command::Help => output
@@ -38,6 +39,18 @@ pub fn run(command: Command, output: &mut impl Write) -> Result<(), CarloError> 
                 Ok(())
             } else {
                 Err(CarloError::UnsuitableEnvironment)
+            }
+        }
+        Command::BinderProbe => {
+            let report = binder::BinderProbe::collect()?;
+            serde_json::to_writer_pretty(&mut *output, &report)?;
+            writeln!(output).map_err(CarloError::output)?;
+            if report.passed() {
+                Ok(())
+            } else {
+                Err(CarloError::UnsupportedFeature(
+                    "Binder probe did not pass; see JSON report",
+                ))
             }
         }
         Command::Serve => Err(CarloError::UnsupportedFeature(
