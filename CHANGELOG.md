@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add the reference API 34 x86_64 accessibility session proof: versioned contracts,
+  bounded Binder callbacks/pool, minimal ServiceInfo registration and connection init.
+- Add idempotent unregister, safe conflict refusal, SIGINT/SIGTERM cleanup and
+  forced-death recovery validation. Keep hierarchy explicitly unavailable.
+- Add Android-native malformed-parcel/resource-cycle tests and reproducible
+  lifecycle smoke tooling; build the reference test harness in CI.
+
 - Add API 34 shell `binder-probe`: dynamically resolve four C Binder exports,
   lookup/ping accessibility, test a null control lookup and release strong refs
   before unloading the library. Report unsupported targets and failures as JSON.

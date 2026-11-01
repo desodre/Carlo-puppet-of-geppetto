@@ -9,6 +9,7 @@ Usage: carlo <command>
 
 Commands:
   doctor [--json]  Report environment and implemented capabilities
+  accessibility-probe [--hold-ms N]  Register/wait/unregister (0..10000 ms hold)
   binder-probe     API 34 shell Binder/ServiceManager proof (JSON)
   serve            Reserved for P3; currently returns unavailable (69)
   --version, -V    Show the package version
@@ -30,6 +31,11 @@ pub enum Command {
         /// Emit a single JSON document on stdout.
         json: bool,
     },
+    /// Exercise a reference-profile session; the executable owns the Binder pool.
+    AccessibilityProbe {
+        /// Bounded post-initialization hold before cleanup (milliseconds).
+        hold_ms: u32,
+    },
     /// Run the API 34 shell Binder proof, emitting JSON even on unavailability.
     BinderProbe,
     /// Reserved entry point for the future session protocol.
@@ -44,6 +50,27 @@ pub fn parse(arguments: impl IntoIterator<Item = String>) -> Result<Command, Car
     let mut arguments = arguments.into_iter();
     let first = arguments.next();
     let second = arguments.next();
+    if first.as_deref() == Some("accessibility-probe") {
+        let hold_ms = match second.as_deref() {
+            None => 0,
+            Some("--hold-ms") => arguments
+                .next()
+                .and_then(|value| value.parse::<u32>().ok())
+                .filter(|value| *value <= 10_000)
+                .ok_or(CarloError::InvalidArguments(
+                    "hold must be 0..10000 milliseconds",
+                ))?,
+            _ => {
+                return Err(CarloError::InvalidArguments(
+                    "unknown accessibility probe option",
+                ));
+            }
+        };
+        if arguments.next().is_some() {
+            return Err(CarloError::InvalidArguments("too many arguments"));
+        }
+        return Ok(Command::AccessibilityProbe { hold_ms });
+    }
     if arguments.next().is_some() {
         return Err(CarloError::InvalidArguments("too many arguments"));
     }

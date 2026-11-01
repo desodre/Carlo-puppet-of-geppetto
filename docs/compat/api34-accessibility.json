@@ -1,0 +1,411 @@
+{
+  "schema_version": 1,
+  "profile": {
+    "android_api": 34,
+    "abi": "x86_64",
+    "uid": 2000,
+    "user_id": 0,
+    "fingerprint": "google/sdk_gphone64_x86_64/emu64xa:14/UE1A.230829.050/12077443:userdebug/dev-keys"
+  },
+  "aosp_tag": "android-14.0.0_r1",
+  "reference_is_exact_image_source_provenance": false,
+  "manager": {
+    "descriptor": "android.view.accessibility.IAccessibilityManager",
+    "register": {
+      "transaction": 10,
+      "flags": 0,
+      "permission": "android.permission.RETRIEVE_WINDOW_CONTENT",
+      "arguments": [
+        "IBinder owner",
+        "IAccessibilityServiceClient client",
+        "typed-object presence=1 + AccessibilityServiceInfo",
+        "i32 userId=0",
+        "i32 flags=1 (DONT_SUPPRESS_ACCESSIBILITY_SERVICES)"
+      ],
+      "reply": "Java exception/status header"
+    },
+    "unregister": {
+      "transaction": 11,
+      "flags": 0,
+      "arguments": [
+        "same IAccessibilityServiceClient Binder"
+      ],
+      "authorization": "service-client Binder identity must match current registration",
+      "reply": "Java exception/status header"
+    }
+  },
+  "client": {
+    "descriptor": "android.accessibilityservice.IAccessibilityServiceClient",
+    "source_oneway": true,
+    "expected_sender_uid": 1000,
+    "callbacks": [
+      {
+        "transaction": 1,
+        "name": "init",
+        "arguments": [
+          "strong Binder connection",
+          "i32 connectionId >= 0",
+          "nullable strong Binder windowToken"
+        ]
+      },
+      {
+        "transaction": 3,
+        "name": "onInterrupt",
+        "arguments": []
+      },
+      {
+        "transaction": 5,
+        "name": "clearAccessibilityCache",
+        "arguments": []
+      }
+    ],
+    "unused_callbacks": "UNKNOWN_TRANSACTION; during closing callbacks are discarded",
+    "max_parcel_bytes": 65536,
+    "max_pending_connection": 1,
+    "init_timeout_ms": 5000
+  },
+  "service_info_fields": [
+    {
+      "name": "eventTypes",
+      "wire": "i32",
+      "value": 0
+    },
+    {
+      "name": "packageNames",
+      "wire": "string_array_length",
+      "value": -1
+    },
+    {
+      "name": "feedbackType",
+      "wire": "i32",
+      "value": 16
+    },
+    {
+      "name": "notificationTimeout",
+      "wire": "i64",
+      "value": 0
+    },
+    {
+      "name": "nonInteractiveUiTimeout",
+      "wire": "i32",
+      "value": 0
+    },
+    {
+      "name": "interactiveUiTimeout",
+      "wire": "i32",
+      "value": 0
+    },
+    {
+      "name": "flags",
+      "wire": "i32",
+      "value": 18
+    },
+    {
+      "name": "crashed",
+      "wire": "i32",
+      "value": 0
+    },
+    {
+      "name": "componentName",
+      "wire": "null_java_parcelable_class_name",
+      "value": null
+    },
+    {
+      "name": "resolveInfo",
+      "wire": "null_java_parcelable_class_name",
+      "value": null
+    },
+    {
+      "name": "settingsActivityName",
+      "wire": "null_string16",
+      "value": null
+    },
+    {
+      "name": "capabilities",
+      "wire": "i32",
+      "value": 1
+    },
+    {
+      "name": "summaryResId",
+      "wire": "i32",
+      "value": 0
+    },
+    {
+      "name": "nonLocalizedSummary",
+      "wire": "null_string16",
+      "value": null
+    },
+    {
+      "name": "descriptionResId",
+      "wire": "i32",
+      "value": 0
+    },
+    {
+      "name": "animatedImageRes",
+      "wire": "i32",
+      "value": 0
+    },
+    {
+      "name": "htmlDescriptionRes",
+      "wire": "i32",
+      "value": 0
+    },
+    {
+      "name": "nonLocalizedDescription",
+      "wire": "null_string16",
+      "value": null
+    },
+    {
+      "name": "isAccessibilityTool",
+      "wire": "boolean_as_i32",
+      "value": 1
+    },
+    {
+      "name": "tileServiceName",
+      "wire": "null_string16",
+      "value": null
+    },
+    {
+      "name": "introResId",
+      "wire": "i32",
+      "value": 0
+    },
+    {
+      "name": "motionEventSources",
+      "wire": "i32",
+      "value": 0
+    }
+  ],
+  "ffi_bindings": [
+    {
+      "symbol": "AServiceManager_checkService",
+      "rust_c_abi_signature": "unsafe extern C fn(*const c_char) -> *mut Binder"
+    },
+    {
+      "symbol": "AIBinder_decStrong",
+      "rust_c_abi_signature": "unsafe extern C fn(*mut Binder)"
+    },
+    {
+      "symbol": "AIBinder_Class_define",
+      "rust_c_abi_signature": "unsafe extern C fn(*const c_char, OnCreate, OnDestroy, OnTransact) -> *mut Class"
+    },
+    {
+      "symbol": "AIBinder_associateClass",
+      "rust_c_abi_signature": "unsafe extern C fn(*mut Binder, *const Class) -> bool"
+    },
+    {
+      "symbol": "AIBinder_new",
+      "rust_c_abi_signature": "unsafe extern C fn(*const Class, *mut c_void) -> *mut Binder"
+    },
+    {
+      "symbol": "AIBinder_getUserData",
+      "rust_c_abi_signature": "unsafe extern C fn(*mut Binder) -> *mut c_void"
+    },
+    {
+      "symbol": "AIBinder_getCallingUid",
+      "rust_c_abi_signature": "unsafe extern C fn() -> u32"
+    },
+    {
+      "symbol": "AIBinder_prepareTransaction",
+      "rust_c_abi_signature": "unsafe extern C fn(*mut Binder, *mut *mut Parcel) -> i32"
+    },
+    {
+      "symbol": "AIBinder_transact",
+      "rust_c_abi_signature": "unsafe extern C fn(*mut Binder, u32, *mut *mut Parcel, *mut *mut Parcel, u32) -> i32"
+    },
+    {
+      "symbol": "AParcel_delete",
+      "rust_c_abi_signature": "unsafe extern C fn(*mut Parcel)"
+    },
+    {
+      "symbol": "AParcel_writeInt32",
+      "rust_c_abi_signature": "unsafe extern C fn(*mut Parcel, i32) -> i32"
+    },
+    {
+      "symbol": "AParcel_writeInt64",
+      "rust_c_abi_signature": "unsafe extern C fn(*mut Parcel, i64) -> i32"
+    },
+    {
+      "symbol": "AParcel_writeString",
+      "rust_c_abi_signature": "unsafe extern C fn(*mut Parcel, *const c_char, i32) -> i32"
+    },
+    {
+      "symbol": "AParcel_writeStrongBinder",
+      "rust_c_abi_signature": "unsafe extern C fn(*mut Parcel, *mut Binder) -> i32"
+    },
+    {
+      "symbol": "AParcel_readInt32",
+      "rust_c_abi_signature": "unsafe extern C fn(*const Parcel, *mut i32) -> i32"
+    },
+    {
+      "symbol": "AParcel_readStrongBinder",
+      "rust_c_abi_signature": "unsafe extern C fn(*const Parcel, *mut *mut Binder) -> i32"
+    },
+    {
+      "symbol": "AParcel_getDataSize",
+      "rust_c_abi_signature": "unsafe extern C fn(*const Parcel) -> i32"
+    },
+    {
+      "symbol": "AParcel_getDataPosition",
+      "rust_c_abi_signature": "unsafe extern C fn(*const Parcel) -> i32"
+    },
+    {
+      "symbol": "AParcel_readStatusHeader",
+      "rust_c_abi_signature": "unsafe extern C fn(*const Parcel, *mut *mut Status) -> i32"
+    },
+    {
+      "symbol": "AStatus_getExceptionCode",
+      "rust_c_abi_signature": "unsafe extern C fn(*const Status) -> i32"
+    },
+    {
+      "symbol": "AStatus_delete",
+      "rust_c_abi_signature": "unsafe extern C fn(*mut Status)"
+    },
+    {
+      "symbol": "ABinderProcess_setThreadPoolMaxThreadCount",
+      "rust_c_abi_signature": "unsafe extern C fn(u32) -> bool"
+    },
+    {
+      "symbol": "ABinderProcess_isThreadPoolStarted",
+      "rust_c_abi_signature": "unsafe extern C fn() -> bool"
+    },
+    {
+      "symbol": "ABinderProcess_startThreadPool",
+      "rust_c_abi_signature": "unsafe extern C fn()"
+    }
+  ],
+  "ndk_parcel_header": {
+    "ndk_version": "28.2.13676358",
+    "path": "sysroot/usr/include/android/binder_parcel.h",
+    "sha256": "8f456a94d31c4954e936bc7b2908a7227d721927a25342e7a689fdf367ff677e"
+  },
+  "sources": [
+    {
+      "repository": "platform/frameworks/base",
+      "revision": "299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368",
+      "path": "core/java/android/view/accessibility/IAccessibilityManager.aidl",
+      "sha256": "e31c2af63e69c8c303ac394e7fa623ded8f113068a923f098d0179d64cc6574d",
+      "url": "https://android.googlesource.com/platform/frameworks/base/+/299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368/core/java/android/view/accessibility/IAccessibilityManager.aidl"
+    },
+    {
+      "repository": "platform/frameworks/base",
+      "revision": "299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368",
+      "path": "core/java/android/accessibilityservice/IAccessibilityServiceClient.aidl",
+      "sha256": "f9d096ee91ab122e4f3d87d281c5097098a3628260d31f827af80f6a1a998dc1",
+      "url": "https://android.googlesource.com/platform/frameworks/base/+/299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368/core/java/android/accessibilityservice/IAccessibilityServiceClient.aidl"
+    },
+    {
+      "repository": "platform/frameworks/base",
+      "revision": "299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368",
+      "path": "core/java/android/accessibilityservice/IAccessibilityServiceConnection.aidl",
+      "sha256": "e106cc132f6854123210d9f547743ac63d40084120f8b89cf1fef32f590eac92",
+      "url": "https://android.googlesource.com/platform/frameworks/base/+/299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368/core/java/android/accessibilityservice/IAccessibilityServiceConnection.aidl"
+    },
+    {
+      "repository": "platform/frameworks/base",
+      "revision": "299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368",
+      "path": "core/java/android/accessibilityservice/AccessibilityServiceInfo.java",
+      "sha256": "bec0adac4b45f6d8c76a64c72b94126dc74f36ee1694620c02cb5405055e6f75",
+      "url": "https://android.googlesource.com/platform/frameworks/base/+/299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368/core/java/android/accessibilityservice/AccessibilityServiceInfo.java"
+    },
+    {
+      "repository": "platform/frameworks/base",
+      "revision": "299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368",
+      "path": "services/accessibility/java/com/android/server/accessibility/AccessibilityManagerService.java",
+      "sha256": "8f9131ddec8b4a763648d9d9cb7b007019a3135a1a089a3acc26ed514c266d7b",
+      "url": "https://android.googlesource.com/platform/frameworks/base/+/299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368/services/accessibility/java/com/android/server/accessibility/AccessibilityManagerService.java"
+    },
+    {
+      "repository": "platform/frameworks/base",
+      "revision": "299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368",
+      "path": "services/accessibility/java/com/android/server/accessibility/UiAutomationManager.java",
+      "sha256": "5c31ef72b1fd6f387b846e06eb97158a5c9d5c2662a2eb3012a98a7ec1a23e34",
+      "url": "https://android.googlesource.com/platform/frameworks/base/+/299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368/services/accessibility/java/com/android/server/accessibility/UiAutomationManager.java"
+    },
+    {
+      "repository": "platform/frameworks/base",
+      "revision": "299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368",
+      "path": "core/java/android/os/Parcel.java",
+      "sha256": "93134d3ae7a5027898dab936e70858b8b9cd28b41fde98c841f80488f4d8791d",
+      "url": "https://android.googlesource.com/platform/frameworks/base/+/299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368/core/java/android/os/Parcel.java"
+    },
+    {
+      "repository": "platform/frameworks/base",
+      "revision": "299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368",
+      "path": "core/java/android/app/UiAutomation.java",
+      "sha256": "a6a0489424ff98207e9659a93d49721ca9bf24626403741cd89b7389ac4f4518",
+      "url": "https://android.googlesource.com/platform/frameworks/base/+/299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368/core/java/android/app/UiAutomation.java"
+    },
+    {
+      "repository": "platform/frameworks/base",
+      "revision": "299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368",
+      "path": "core/java/android/app/UiAutomationConnection.java",
+      "sha256": "bef20469d1af935fca6e4fc6664cc3fa6d55348d02f69f339c0645147e428b21",
+      "url": "https://android.googlesource.com/platform/frameworks/base/+/299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368/core/java/android/app/UiAutomationConnection.java"
+    },
+    {
+      "repository": "platform/frameworks/base",
+      "revision": "299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368",
+      "path": "core/res/AndroidManifest.xml",
+      "sha256": "b1ea5717df349624d78d28809ed73545b06d7a604ada54a6b1300fb9ab4c358e",
+      "url": "https://android.googlesource.com/platform/frameworks/base/+/299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368/core/res/AndroidManifest.xml"
+    },
+    {
+      "repository": "platform/frameworks/native",
+      "revision": "bfcf75076e562945bae131a4929f29a90d0d2481",
+      "path": "libs/binder/ndk/ibinder.cpp",
+      "sha256": "3cd736799f0bfd7ddac428c2864f368b26905a6617fd6b042845c2745877122a",
+      "url": "https://android.googlesource.com/platform/frameworks/native/+/bfcf75076e562945bae131a4929f29a90d0d2481/libs/binder/ndk/ibinder.cpp"
+    },
+    {
+      "repository": "platform/frameworks/native",
+      "revision": "bfcf75076e562945bae131a4929f29a90d0d2481",
+      "path": "libs/binder/ndk/parcel.cpp",
+      "sha256": "f1245940758183d55b01f9ae93b7d027cbdc1fc6714275b0e8e15c62d6a67b74",
+      "url": "https://android.googlesource.com/platform/frameworks/native/+/bfcf75076e562945bae131a4929f29a90d0d2481/libs/binder/ndk/parcel.cpp"
+    },
+    {
+      "repository": "platform/frameworks/native",
+      "revision": "bfcf75076e562945bae131a4929f29a90d0d2481",
+      "path": "libs/binder/ndk/include_platform/android/binder_process.h",
+      "sha256": "69f6c0d70856ab855c422594ab1a0e6dd8c2c98591cf6b7de19358d67f3dcc73",
+      "url": "https://android.googlesource.com/platform/frameworks/native/+/bfcf75076e562945bae131a4929f29a90d0d2481/libs/binder/ndk/include_platform/android/binder_process.h"
+    },
+    {
+      "repository": "platform/frameworks/native",
+      "revision": "bfcf75076e562945bae131a4929f29a90d0d2481",
+      "path": "libs/binder/ndk/include_platform/android/binder_manager.h",
+      "sha256": "eaa3f87905b003b56be8ffd978667cb36b39af416b8d7cdeb0a63b4c1bb6c142",
+      "url": "https://android.googlesource.com/platform/frameworks/native/+/bfcf75076e562945bae131a4929f29a90d0d2481/libs/binder/ndk/include_platform/android/binder_manager.h"
+    },
+    {
+      "repository": "platform/frameworks/native",
+      "revision": "bfcf75076e562945bae131a4929f29a90d0d2481",
+      "path": "libs/binder/ndk/include_ndk/android/binder_ibinder.h",
+      "sha256": "d45ee770558e80d4c7b62ff51e48f03240dfcb777e9118b26effedaf1c8e10d7",
+      "url": "https://android.googlesource.com/platform/frameworks/native/+/bfcf75076e562945bae131a4929f29a90d0d2481/libs/binder/ndk/include_ndk/android/binder_ibinder.h"
+    },
+    {
+      "repository": "platform/frameworks/native",
+      "revision": "bfcf75076e562945bae131a4929f29a90d0d2481",
+      "path": "libs/binder/ndk/include_ndk/android/binder_status.h",
+      "sha256": "33cc1cca381979c0819ebf1ff07dcee85d767e4abee46bb982e533b6b4580858",
+      "url": "https://android.googlesource.com/platform/frameworks/native/+/bfcf75076e562945bae131a4929f29a90d0d2481/libs/binder/ndk/include_ndk/android/binder_status.h"
+    }
+  ],
+  "test_only_ffi_bindings": [
+    {
+      "symbol": "AParcel_create",
+      "rust_c_abi_signature": "unsafe extern C fn() -> *mut Parcel"
+    },
+    {
+      "symbol": "AParcel_setDataPosition",
+      "rust_c_abi_signature": "unsafe extern C fn(*const Parcel, i32) -> i32"
+    }
+  ],
+  "c_callback_signatures": {
+    "onCreate": "unsafe extern C fn(*mut c_void) -> *mut c_void",
+    "onDestroy": "unsafe extern C fn(*mut c_void)",
+    "onTransact": "unsafe extern C fn(*mut Binder, u32, *const Parcel, *mut Parcel) -> i32"
+  }
+}

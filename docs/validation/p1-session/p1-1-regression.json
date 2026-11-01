@@ -1,0 +1,14 @@
+{
+  "serial": "emulator-5580",
+  "emulator": true,
+  "android_api": 34,
+  "abi": "x86_64",
+  "session_directory": "/data/local/tmp/carlo-8abecf40d018430eba179bd919528110",
+  "command": [
+    "binder-probe"
+  ],
+  "cleanup_removed": true,
+  "exit_code": 0,
+  "stdout": "{\n  \"schema_version\": 1,\n  \"environment\": {\n    \"schema_version\": 1,\n    \"agent_version\": \"0.1.0\",\n    \"platform\": \"android\",\n    \"architecture\": \"x86_64\",\n    \"android_api\": 34,\n    \"device_abi\": \"x86_64\",\n    \"effective_uid\": 2000,\n    \"selinux_context\": \"u:r:shell:s0\",\n    \"foundation_ready\": true,\n    \"checks\": [\n      {\n        \"name\": \"platform\",\n        \"status\": \"ok\",\n        \"detail\": \"Android runtime\"\n      },\n      {\n        \"name\": \"android_api\",\n        \"status\": \"ok\",\n        \"detail\": \"API meets the candidate native build floor (29)\"\n      },\n      {\n        \"name\": \"architecture\",\n        \"status\": \"ok\",\n        \"detail\": \"initial native build target\"\n      },\n      {\n        \"name\": \"identity\",\n        \"status\": \"ok\",\n        \"detail\": \"running as shell\"\n      },\n      {\n        \"name\": \"selinux_context\",\n        \"status\": \"ok\",\n        \"detail\": \"process context available; no policy changes made\"\n      }\n    ],\n    \"capabilities\": [\n      {\n        \"name\": \"binder_hierarchy\",\n        \"available\": false,\n        \"reason\": \"not implemented; P1/P4\"\n      },\n      {\n        \"name\": \"display_capture\",\n        \"available\": false,\n        \"reason\": \"not implemented; P2/P6\"\n      },\n      {\n        \"name\": \"h264_stream\",\n        \"available\": false,\n        \"reason\": \"not implemented; P2/P5\"\n      },\n      {\n        \"name\": \"serve_protocol\",\n        \"available\": false,\n        \"reason\": \"not implemented; P3\"\n      }\n    ]\n  },\n  \"outcome\": {\n    \"status\": \"passed\",\n    \"symbols\": [\n      {\n        \"name\": \"AServiceManager_checkService\",\n        \"available\": true\n      },\n      {\n        \"name\": \"AIBinder_decStrong\",\n        \"available\": true\n      },\n      {\n        \"name\": \"AIBinder_isRemote\",\n        \"available\": true\n      },\n      {\n        \"name\": \"AIBinder_ping\",\n        \"available\": true\n      }\n    ],\n    \"lookups\": [\n      {\n        \"name\": \"accessibility\",\n        \"found\": true,\n        \"remote\": true,\n        \"ping_status\": 0\n      },\n      {\n        \"name\": \"carlo.probe.absent\",\n        \"found\": false,\n        \"remote\": null,\n        \"ping_status\": null\n      }\n    ]\n  },\n  \"hierarchy_available\": false\n}\n",
+  "stderr": ""
+}

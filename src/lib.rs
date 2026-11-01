@@ -2,6 +2,7 @@
 //!
 //! Binder lookup has an API 34 probe. Hierarchy, streaming and serve are not implemented.
 
+mod accessibility;
 pub mod binder;
 pub mod cli;
 pub mod diagnostics;
@@ -39,6 +40,18 @@ pub fn run(command: Command, output: &mut impl Write) -> Result<(), CarloError> 
                 Ok(())
             } else {
                 Err(CarloError::UnsuitableEnvironment)
+            }
+        }
+        Command::AccessibilityProbe { hold_ms } => {
+            let report = accessibility::collect(hold_ms)?;
+            serde_json::to_writer_pretty(&mut *output, &report)?;
+            writeln!(output).map_err(CarloError::output)?;
+            if report.passed() {
+                Ok(())
+            } else {
+                Err(CarloError::UnsupportedFeature(
+                    "accessibility session proof did not pass; see JSON report",
+                ))
             }
         }
         Command::BinderProbe => {

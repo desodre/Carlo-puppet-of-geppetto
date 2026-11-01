@@ -8,7 +8,7 @@ use serde::Serialize;
 use crate::{diagnostics::Diagnostics, error::CarloError};
 
 #[cfg(any(target_os = "android", all(test, unix)))]
-mod native;
+pub(crate) mod native;
 
 /// Bounded JSON result of the read-only Binder proof.
 #[derive(Debug, Serialize)]
