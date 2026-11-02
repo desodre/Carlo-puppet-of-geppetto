@@ -1,4 +1,4 @@
-//! Reference-profile session and query-envelope proofs. No decoded UI payload logging.
+//! Reference-profile session and minimum-node proofs. Diagnostics never log UI payloads.
 
 #![cfg_attr(
     not(target_os = "android"),
@@ -14,6 +14,7 @@ use serde::Serialize;
 mod contract;
 #[cfg(target_os = "android")]
 mod native;
+mod node;
 mod query;
 mod state;
 
@@ -38,6 +39,8 @@ pub(crate) enum Error {
     QueryRejected,
     QueryIdExhausted,
     InvalidCallback,
+    InvalidNode(&'static str),
+    UnsupportedNodeLayout(&'static str),
     Cancelled,
     Runtime(&'static str),
 }
@@ -62,6 +65,8 @@ pub(crate) struct Report {
     runtime_fingerprint: Option<String>,
     outcome: Outcome,
     hierarchy_available: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    node: Option<node::Node>,
 }
 
 impl Report {
@@ -79,15 +84,15 @@ pub(crate) fn collect(hold_ms: u32) -> Result<Report, CarloError> {
             "hold must be 0..10000 milliseconds",
         ));
     }
-    collect_mode(hold_ms, false)
+    collect_mode(hold_ms, false, false)
 }
 
-pub(crate) fn collect_node() -> Result<Report, CarloError> {
-    collect_mode(0, true)
+pub(crate) fn collect_node(emit_node: bool) -> Result<Report, CarloError> {
+    collect_mode(0, true, emit_node)
 }
 
 #[cfg_attr(not(target_os = "android"), allow(unused_variables))]
-fn collect_mode(hold_ms: u32, query: bool) -> Result<Report, CarloError> {
+fn collect_mode(hold_ms: u32, query: bool, emit_node: bool) -> Result<Report, CarloError> {
     let environment = Diagnostics::collect()?;
     let fingerprint = fingerprint()?;
     let supported = contract::supported(
@@ -95,7 +100,7 @@ fn collect_mode(hold_ms: u32, query: bool) -> Result<Report, CarloError> {
         std::env::consts::ARCH,
         fingerprint.as_deref(),
     );
-    let outcome = if supported {
+    let mut outcome = if supported {
         #[cfg(target_os = "android")]
         {
             native::probe_mode(hold_ms, query)
@@ -110,12 +115,18 @@ fn collect_mode(hold_ms: u32, query: bool) -> Result<Report, CarloError> {
             ..Outcome::default()
         }
     };
+    let node = if emit_node {
+        outcome.query.as_mut().and_then(|result| result.node.take())
+    } else {
+        None
+    };
     Ok(Report {
         schema_version: 1,
         environment,
         runtime_fingerprint: fingerprint,
         outcome,
         hierarchy_available: false,
+        node,
     })
 }
 

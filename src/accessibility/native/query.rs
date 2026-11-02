@@ -1,6 +1,6 @@
 //! A new callback capability for each request, never published in ServiceManager.
 //! Android forwards it to the target app; unlike session init, caller is not
-//! necessarily system UID. No payload text, remote messages, or raw parcels escape.
+//! necessarily system UID. Diagnostics exclude payload text and raw parcels.
 use super::*;
 use crate::accessibility::query::{Envelope, Pending};
 
@@ -60,28 +60,28 @@ fn dispatch(binder: *mut Binder, code: u32, parcel: *const Parcel) -> i32 {
 }
 
 fn read_envelope(api: &'static Api, parcel: NonNull<Parcel>) -> Result<Envelope, Error> {
-    let mut reader = Reader::bounded(api, parcel)?;
-    // SAFETY: caller borrows a live input parcel; metadata access does not retain it.
+    let _reader = Reader::bounded(api, parcel)?;
+    // SAFETY: borrowed live input; metadata queries preserve ownership and cursor.
     let (start, end) = unsafe {
         (
             (api.data_position)(parcel.as_ptr()),
             (api.data_size)(parcel.as_ptr()),
         )
     };
-    let bytes = end
+    let len = end
         .checked_sub(start)
-        .filter(|n| *n >= 8 && *n % 4 == 0)
-        .ok_or(Error::InvalidCallback)?;
-    let presence = reader.int()?;
-    // The trailing interactionId position is fixed by AIDL, independent of the
-    // variable Java parcelable. Only observe its envelope; do not trust node fields.
-    // SAFETY: offset is aligned and in bounds, checked above; parcel stays borrowed.
-    status("query_result_position", unsafe {
-        (api.set_position)(parcel.as_ptr(), end - 4)
-    })?;
-    let id = reader.int()?;
-    reader.finish()?;
-    Envelope::checked(presence, bytes - 8, id)
+        .filter(|len| start >= 0 && *len >= 8)
+        .ok_or(Error::InvalidCallback)? as usize;
+    // Total parcel size was bounded before allocating. No runtime bytes are logged/persisted.
+    let mut bytes = vec![0_u8; len];
+    // SAFETY: destination has len writable bytes; validated start/len are in this live parcel.
+    // NDK additionally rejects all Binder/FD objects and checks actual dataBufferSize.
+    let result = unsafe { (api.marshal)(parcel.as_ptr(), bytes.as_mut_ptr(), start as usize, len) };
+    if result == -38 {
+        return Err(Error::UnsupportedNodeLayout("binder_or_fd_objects"));
+    }
+    status("marshal_node", result)?;
+    crate::accessibility::node::decode(&bytes)
 }
 
 impl Session {
@@ -233,6 +233,56 @@ mod tests {
         }
     }
     #[test]
+    fn ndk_utf16_and_object_rejection_match_safe_decoder() {
+        let api = Api::global().unwrap();
+        let address = api._library.symbol(c"AParcel_create").unwrap();
+        // SAFETY: exact public NDK signature, library retained by the process.
+        let create = unsafe {
+            std::mem::transmute::<*mut c_void, unsafe extern "C" fn() -> *mut Parcel>(
+                address.as_ptr(),
+            )
+        };
+        // SAFETY: constructor yields one uniquely owned standalone parcel.
+        let mut parcel = OwnedParcel::from_owned(api, unsafe { create() }).unwrap();
+        parcel.int(1).unwrap();
+        parcel.long(1 << 28).unwrap();
+        let value = c"fixture:id/ação_木🪵";
+        assert_eq!(
+            // SAFETY: valid UTF-8 C string with explicit byte length; NDK writes String16.
+            unsafe {
+                (api.write_string)(
+                    parcel.pointer.as_ptr(),
+                    value.as_ptr(),
+                    value.to_bytes().len() as i32,
+                )
+            },
+            0
+        );
+        parcel.int(3).unwrap();
+        // SAFETY: offset zero is in bounds of our fully written owned parcel.
+        assert_eq!(unsafe { (api.set_position)(parcel.pointer.as_ptr(), 0) }, 0);
+        let envelope = read_envelope(api, parcel.pointer).unwrap();
+        assert!(envelope.fields_decoded);
+        assert!(envelope.node.unwrap().resource_id.as_deref() == Some("fixture:id/ação_木🪵"));
+        // SAFETY: second independent standalone allocation, owned until end of test.
+        let mut objects = OwnedParcel::from_owned(api, unsafe { create() }).unwrap();
+        let classes = Classes::global(api).unwrap();
+        let owner = local_binder(api, classes.owner, &Arc::new(Shared::new())).unwrap();
+        objects.int(1).unwrap();
+        objects.long(1 << 42).unwrap();
+        objects.binder(&owner).unwrap();
+        objects.int(4).unwrap();
+        assert_eq!(
+            // SAFETY: same bounded rewind of live owned parcel.
+            unsafe { (api.set_position)(objects.pointer.as_ptr(), 0) },
+            0
+        );
+        assert_eq!(
+            read_envelope(api, objects.pointer),
+            Err(Error::UnsupportedNodeLayout("binder_or_fd_objects"))
+        );
+    }
+    #[test]
     fn real_queries_correlate_null_rejection_recovery_and_release_resources() {
         let environment = crate::diagnostics::Diagnostics::collect().unwrap();
         assert!(contract::supported(
@@ -263,7 +313,7 @@ mod tests {
             }
         };
         println!("CARLO_QUERY_SETUP_REJECTIONS {setup_rejections}");
-        assert!(first.node_present && !first.fields_decoded);
+        assert!(first.node_present && first.fields_decoded);
         let null = session
             .query_node(contract::ACTIVE_WINDOW, 0x7fffffff7fffffff, timeout)
             .unwrap();
@@ -299,7 +349,7 @@ mod tests {
             let envelope = session
                 .query_node(contract::ACTIVE_WINDOW, contract::ROOT_NODE, timeout)
                 .unwrap();
-            assert!(envelope.node_present && !envelope.fields_decoded);
+            assert!(envelope.node_present && envelope.fields_decoded);
             assert_eq!(envelope.interaction_id, previous + 1);
             previous = envelope.interaction_id;
             samples.push(resources());

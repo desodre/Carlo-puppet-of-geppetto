@@ -43,6 +43,8 @@ struct Api {
     _library: Library,
     check: unsafe extern "C" fn(*const c_char) -> *mut Binder,
     retain: unsafe extern "C" fn(*mut Binder),
+    marshal: unsafe extern "C" fn(*const Parcel, *mut u8, usize, usize) -> i32,
+    #[cfg(test)]
     set_position: unsafe extern "C" fn(*const Parcel, i32) -> i32,
     release: unsafe extern "C" fn(*mut Binder),
     define: unsafe extern "C" fn(*const c_char, OnCreate, OnDestroy, OnTransact) -> *mut Class,
@@ -101,6 +103,11 @@ impl Api {
                 unsafe extern "C" fn(*const c_char) -> *mut Binder
             ),
             retain: symbol!(c"AIBinder_incStrong", unsafe extern "C" fn(*mut Binder)),
+            marshal: symbol!(
+                c"AParcel_marshal",
+                unsafe extern "C" fn(*const Parcel, *mut u8, usize, usize) -> i32
+            ),
+            #[cfg(test)]
             set_position: symbol!(
                 c"AParcel_setDataPosition",
                 unsafe extern "C" fn(*const Parcel, i32) -> i32

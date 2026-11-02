@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "android_api": 29,
+  "rustc": "rustc 1.96.0 (ac68faa20 2026-05-25)",
+  "ndk_version": "28.2.13676358",
+  "artifacts": [
+    {
+      "target": "x86_64-linux-android",
+      "file": "carlo-tests",
+      "bytes": 11117792,
+      "sha256": "b867e957f2ff6f22d3bbc5034445333d27ef1535a55b46e64e990f3882382c6e"
+    }
+  ]
+}

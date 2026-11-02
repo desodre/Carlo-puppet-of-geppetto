@@ -1,0 +1,9 @@
+{
+  "package": "org.geppetto.carlo.fixture",
+  "api": 34,
+  "compile_sdk": 35,
+  "build_tools": "36.0.0",
+  "sha256": "b57a9baea044ef70fd8a581ce967af93d656906455e342b77a45ceb199b5d577",
+  "role": "app under test, not Carlo agent",
+  "javac": "javac 21.0.12.1"
+}

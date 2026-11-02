@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Decode the pinned API 34 minimum AccessibilityNodeInfo layout with bounded safe
+  Rust reads, Unicode, node/window IDs, children, bounds and boolean properties.
+  Reject unknown masks, unsupported spans/layouts and Binder/FD-bearing parcels.
+- Add explicit `node-read-probe` stdout data while keeping query diagnostics redacted;
+  full hierarchy remains unavailable. Add controlled fixture text-change validation,
+  parser mutation/truncation coverage and native NDK interop tests (#23).
+- Document verified CI acceptance for host checks, both Android ABI checks/builds
+  and native test harness artifacts (#78); device execution remains a separate check.
+
 - Add reference-profile `node-query-probe`: one active-root request, isolated callback,
   interaction-ID correlation, bounded envelope/deadline and explicit null/rejection
   results. Node fields remain undecoded (#23); hierarchy capability stays unavailable.
