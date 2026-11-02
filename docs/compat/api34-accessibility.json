@@ -279,9 +279,9 @@
       "rust_c_abi_signature": "unsafe extern C fn(*mut Binder)"
     },
     {
-      "symbol": "AParcel_setDataPosition",
-      "ownership": "Borrowed parcel, checked aligned in-bounds cursor; no ownership transfer.",
-      "rust_c_abi_signature": "unsafe extern C fn(*const Parcel, i32) -> i32"
+      "symbol": "AParcel_marshal",
+      "rust_c_abi_signature": "unsafe extern C fn(*const Parcel, *mut u8, usize, usize) -> i32",
+      "ownership": "Borrow live callback parcel, copy bounded argument bytes to owned Vec; reject Binder/FD objects; never persist raw runtime bytes. API33+ export used only on guarded API34 profile."
     }
   ],
   "ndk_parcel_header": {
@@ -450,12 +450,31 @@
       "path": "services/accessibility/java/com/android/server/accessibility/AccessibilitySecurityPolicy.java",
       "sha256": "eaaba8541ff6d1b2f1cf75cfda1273b7dd7496b1b61dc2358ec8b7198e076f5e",
       "url": "https://android.googlesource.com/platform/frameworks/base/+/299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368/services/accessibility/java/com/android/server/accessibility/AccessibilitySecurityPolicy.java"
+    },
+    {
+      "repository": "platform/frameworks/base",
+      "revision": "299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368",
+      "path": "core/java/android/text/TextUtils.java",
+      "sha256": "a0f2e3e8c05a228c47a9b6182608033d517eb53f78c68d1982615d24008420cd",
+      "url": "https://android.googlesource.com/platform/frameworks/base/+/299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368/core/java/android/text/TextUtils.java"
+    },
+    {
+      "repository": "platform/frameworks/base",
+      "revision": "299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368",
+      "path": "core/java/android/os/BaseBundle.java",
+      "sha256": "bfe85678ff3b2508489a7e5523b49c8d7bfdbc6820ed74cc8678531306ef7aa2",
+      "url": "https://android.googlesource.com/platform/frameworks/base/+/299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368/core/java/android/os/BaseBundle.java"
     }
   ],
   "test_only_ffi_bindings": [
     {
       "symbol": "AParcel_create",
       "rust_c_abi_signature": "unsafe extern C fn() -> *mut Parcel"
+    },
+    {
+      "symbol": "AParcel_setDataPosition",
+      "ownership": "Borrowed parcel, checked aligned in-bounds cursor; no ownership transfer.",
+      "rust_c_abi_signature": "unsafe extern C fn(*const Parcel, i32) -> i32"
     }
   ],
   "c_callback_signatures": {
@@ -486,14 +505,220 @@
       "i32 interactionId"
     ],
     "callback_authority": "Unpublished per-request Binder capability forwarded to target app by accessibility service; not restricted to system UID.",
-    "envelope_only": true,
-    "node_fields_validated": false,
-    "payload_copied_or_logged": false,
+    "envelope_only": false,
+    "node_fields_validated": "supported minimum fields only",
+    "payload_copied_or_logged": "Bounded in-memory copy; never logged or persisted. Decoded fields only in explicit node-read-probe command data.",
     "maximum_parcel_bytes": 65536,
     "deadline_ms": 5000,
     "in_flight_per_session": 1,
     "id_reuse": false,
-    "synchronous_dispatch_cancellable": false,
-    "fields_decoder_issue": 23
+    "synchronous_dispatch_cancellable": false
+  },
+  "node_decoder": {
+    "endianness": "little, verified x86_64 reference only",
+    "non_default_fields": "u64 bitmap, field order below, unknown bits rejected",
+    "fields": [
+      {
+        "bit": 0,
+        "name": "sealed"
+      },
+      {
+        "bit": 1,
+        "name": "sourceNodeId"
+      },
+      {
+        "bit": 2,
+        "name": "windowId"
+      },
+      {
+        "bit": 3,
+        "name": "parentNodeId"
+      },
+      {
+        "bit": 4,
+        "name": "labelForId"
+      },
+      {
+        "bit": 5,
+        "name": "labeledById"
+      },
+      {
+        "bit": 6,
+        "name": "traversalBefore"
+      },
+      {
+        "bit": 7,
+        "name": "traversalAfter"
+      },
+      {
+        "bit": 8,
+        "name": "minDurationBetweenContentChanges"
+      },
+      {
+        "bit": 9,
+        "name": "connectionId"
+      },
+      {
+        "bit": 10,
+        "name": "childNodeIds"
+      },
+      {
+        "bit": 11,
+        "name": "boundsInParent"
+      },
+      {
+        "bit": 12,
+        "name": "boundsInScreen"
+      },
+      {
+        "bit": 13,
+        "name": "boundsInWindow"
+      },
+      {
+        "bit": 14,
+        "name": "actions"
+      },
+      {
+        "bit": 15,
+        "name": "maxTextLength"
+      },
+      {
+        "bit": 16,
+        "name": "movementGranularities"
+      },
+      {
+        "bit": 17,
+        "name": "booleanProperties"
+      },
+      {
+        "bit": 18,
+        "name": "packageName"
+      },
+      {
+        "bit": 19,
+        "name": "className"
+      },
+      {
+        "bit": 20,
+        "name": "text"
+      },
+      {
+        "bit": 21,
+        "name": "hintText"
+      },
+      {
+        "bit": 22,
+        "name": "error"
+      },
+      {
+        "bit": 23,
+        "name": "stateDescription"
+      },
+      {
+        "bit": 24,
+        "name": "contentDescription"
+      },
+      {
+        "bit": 25,
+        "name": "paneTitle"
+      },
+      {
+        "bit": 26,
+        "name": "tooltipText"
+      },
+      {
+        "bit": 27,
+        "name": "containerTitle"
+      },
+      {
+        "bit": 28,
+        "name": "viewIdResourceName"
+      },
+      {
+        "bit": 29,
+        "name": "uniqueId"
+      },
+      {
+        "bit": 30,
+        "name": "textSelectionStart"
+      },
+      {
+        "bit": 31,
+        "name": "textSelectionEnd"
+      },
+      {
+        "bit": 32,
+        "name": "inputType"
+      },
+      {
+        "bit": 33,
+        "name": "liveRegion"
+      },
+      {
+        "bit": 34,
+        "name": "drawingOrderInParent"
+      },
+      {
+        "bit": 35,
+        "name": "extraDataKeys"
+      },
+      {
+        "bit": 36,
+        "name": "extras"
+      },
+      {
+        "bit": 37,
+        "name": "rangeInfo"
+      },
+      {
+        "bit": 38,
+        "name": "collectionInfo"
+      },
+      {
+        "bit": 39,
+        "name": "collectionItemInfo"
+      },
+      {
+        "bit": 40,
+        "name": "touchDelegateInfo"
+      },
+      {
+        "bit": 41,
+        "name": "extraRenderingInfo"
+      },
+      {
+        "bit": 42,
+        "name": "leashedChild"
+      },
+      {
+        "bit": 43,
+        "name": "leashedParent"
+      },
+      {
+        "bit": 44,
+        "name": "leashedParentNodeId"
+      }
+    ],
+    "char_sequence": "kind 1 + String8; kind 0 supported only with null text or empty span list. Nonempty spans explicitly unsupported.",
+    "string": "nullable i32 length + UTF16 units + null terminator + 4-byte padding",
+    "bounds_order": [
+      "top",
+      "bottom",
+      "left",
+      "right"
+    ],
+    "max_parcel_bytes": 65536,
+    "max_string_bytes_or_utf16_units": 8192,
+    "max_children": 1024,
+    "max_actions_or_extra_keys": 128,
+    "unsupported_fields": [
+      40,
+      41,
+      42,
+      43
+    ],
+    "bundle": "length/magic/bounds checked then skipped; extras_omitted=true, contents not semantically validated",
+    "raw_runtime_parcels_persisted": false,
+    "hierarchy_available": false
   }
 }

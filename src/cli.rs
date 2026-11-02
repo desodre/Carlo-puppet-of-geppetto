@@ -10,7 +10,8 @@ Usage: carlo <command>
 Commands:
   doctor [--json]  Report environment and implemented capabilities
   accessibility-probe [--hold-ms N]  Register/wait/unregister (0..10000 ms hold)
-  node-query-probe  Query active root; report envelope metadata only (JSON)
+  node-query-probe  Decode active root; report metadata only (JSON)
+  node-read-probe   Emit decoded root as command data (includes UI text)
   binder-probe     API 34 shell Binder/ServiceManager proof (JSON)
   serve            Reserved for P3; currently returns unavailable (69)
   --version, -V    Show the package version
@@ -39,8 +40,10 @@ pub enum Command {
     },
     /// Run the API 34 shell Binder proof, emitting JSON even on unavailability.
     BinderProbe,
-    /// Query one root callback envelope; field decoding belongs to P1.6.
+    /// Decode one root and emit metadata without UI contents.
     NodeQueryProbe,
+    /// Emit decoded root data on stdout, never in diagnostics.
+    NodeReadProbe,
     /// Reserved entry point for the future session protocol.
     Serve,
 }
@@ -82,6 +85,7 @@ pub fn parse(arguments: impl IntoIterator<Item = String>) -> Result<Command, Car
         (Some("--version" | "-V"), None) => Ok(Command::Version),
         (Some("doctor"), None) => Ok(Command::Doctor { json: false }),
         (Some("doctor"), Some("--json")) => Ok(Command::Doctor { json: true }),
+        (Some("node-read-probe"), None) => Ok(Command::NodeReadProbe),
         (Some("node-query-probe"), None) => Ok(Command::NodeQueryProbe),
         (Some("binder-probe"), None) => Ok(Command::BinderProbe),
         (Some("serve"), None) => Ok(Command::Serve),

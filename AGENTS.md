@@ -19,9 +19,14 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md), [PLANO.md](PLANO.md) and the relevant i
 - After starting callbacks, keep the API table, class metadata and pool alive for
   the process lifetime. Release all per-session parcels/Binder refs with RAII.
   Close callback state before unregister; known conflict must not unregister others.
-- `node-query-probe` observes only the bounded callback envelope; opaque payloads
-  are never decoded nodes. Each request owns isolated callback state and a deadline;
-  the target app may call this Binder capability directly (not only system UID).
+- `src/accessibility/node.rs` decodes the pinned minimum node layout in safe Rust.
+  NDK marshal copies at most 64 KiB in memory and rejects Binder/FD-bearing parcels.
+  Reject unknown layouts/spans explicitly; never persist raw runtime parcel bytes.
+  `node-query-probe` emits metadata; only `node-read-probe` emits decoded command data.
+  Debug/diagnostics redact node contents. Each request owns isolated callback state
+  and a deadline; the target app may call it directly (not only system UID).
+- `tools/fixture/` is the controlled app under test, never an agent/Java bridge.
+  Fixture smoke refuses physical devices/existing packages and uninstalls its APK.
 - Report unavailable features honestly; a successful doctor check is not Binder compatibility.
 - Stdout is command data; errors/diagnostics go to stderr. Never log UI contents or secrets.
 

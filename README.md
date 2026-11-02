@@ -111,7 +111,7 @@ execução. Alinhamento ELF não equivale a teste em kernel com páginas de 16 K
 A sessão recusa aparelho físico por padrão, valida API/ABI/hash e executa em
 diretório exclusivo, removido ao terminar. `--allow-physical` exige autorização
 prévia para esse aparelho. Os comandos disponíveis são `doctor`, `version`,
-`binder-probe`, `accessibility-probe`, `accessibility-hold`, `node-query-probe` e `serve`; use
+`binder-probe`, `accessibility-probe`, `accessibility-hold`, `node-query-probe`, `node-read-probe` e `serve`; use
 `--report` para salvar evidência JSON e `--timeout` para prazo limitado.
 Smoke test em emulador já iniciado:
 
@@ -157,18 +157,29 @@ SIGTERM solicitam cleanup; o host mantém timeout para chamadas Binder presas.
 de nós. [Plano aplicado](docs/plans/p1-accessibility-session.md),
 [contratos e prova da sessão](docs/validation/p1-session.md).
 
-`node-query-probe` consulta a raiz da janela ativa e recebe o callback nativo:
+`node-query-probe` consulta e decodifica a raiz da janela ativa; emite apenas
+metadados (`fields_decoded=true`). Para receber os campos como dados em stdout:
 
 ```sh
-python3 tools/android_session.py --serial emulator-5554 --command node-query-probe
+python3 tools/android_session.py --serial emulator-5554 --command node-read-probe
 ```
 
-Retorna somente presença, tamanho opaco e `interaction_id`; `fields_decoded=false`.
-Não entrega texto, bounds ou XML: decoder pertence à #23. Resultado nulo é diferente
-de `query_rejected` (janela/permissão/estado remoto não distinguíveis nesta resposta).
-Após ativar a sessão, a janela pode ainda não estar disponível; a prova informa a
-rejeição sem retry automático. Deadline de callback: 5 s; host cobre Binder preso.
-[Plano #22](docs/plans/p1-node-query.md) e [evidência](docs/validation/p1-node-query.md).
+`node-read-probe` inclui texto, pacote/classe, descrição, IDs, filhos, bounds e
+booleanos. Não salva ou registra conteúdo em logs do agente. O helper, quando
+invocado diretamente, imprime o JSON como dados do comando; `--report` persiste
+esse resultado se solicitado. O smoke da fixture compara dados em memória e salva
+apenas verificações sem texto.
+
+Decoder inicial API 34: strings UTF-8/UTF-16, texto simples, limites de parcel e
+coleções. Spans não vazios, TouchDelegate, ExtraRendering e referências Binder/FD
+retornam `unsupported_node_layout`. Bundles extras têm limites validados, mas seu
+conteúdo é omitido (`extras_omitted=true`). Não há promessa de suporte a qualquer UI.
+
+Resultado nulo difere de `query_rejected` (janela/permissão/estado remoto não
+distinguíveis). A janela pode ficar disponível após init; a prova informa rejeição
+sem retry automático. Callback tem deadline de 5 s; host cobre Binder preso.
+Hierarquia completa/XML continuam pendentes. [Plano #23/#78](docs/plans/p1-node-decoder.md)
+e [validação](docs/validation/p1-node-decoder.md).
 
 Códigos do agente: 0 sucesso, 64 argumentos inválidos, 69 indisponível, 74 I/O/JSON.
 Timeout do helper retorna 124. Detalhes em [CONTRIBUTING.md](CONTRIBUTING.md).

@@ -1,4 +1,4 @@
-//! Query transport only: opaque node data is not decoded or exposed as a node.
+//! Correlated query state. Node data is omitted from metadata serialization.
 use super::Error;
 use serde::Serialize;
 use std::time::Instant;
@@ -18,10 +18,13 @@ pub(super) struct Envelope {
     pub(super) node_present: bool,
     pub(super) opaque_node_bytes: u32,
     pub(super) fields_decoded: bool,
+    #[serde(skip)]
+    pub(super) node: Option<super::node::Node>,
 }
 impl Envelope {
     /// The pinned AIDL writes presence, opaque node, then interactionId. This only
     /// validates that outer envelope. Full parcelable validation is issue #23.
+    #[cfg(test)]
     pub(super) fn checked(presence: i32, bytes: i32, id: i32) -> Result<Self, Error> {
         if id <= 0 || bytes < 0 || bytes % 4 != 0 || !matches!((presence, bytes), (0, 0) | (1, 8..))
         {
@@ -32,6 +35,7 @@ impl Envelope {
             node_present: presence == 1,
             opaque_node_bytes: bytes as u32,
             fields_decoded: false,
+            node: None,
         })
     }
 }

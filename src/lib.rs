@@ -54,8 +54,8 @@ pub fn run(command: Command, output: &mut impl Write) -> Result<(), CarloError> 
                 ))
             }
         }
-        Command::NodeQueryProbe => {
-            let report = accessibility::collect_node()?;
+        Command::NodeQueryProbe | Command::NodeReadProbe => {
+            let report = accessibility::collect_node(matches!(command, Command::NodeReadProbe))?;
             serde_json::to_writer_pretty(&mut *output, &report)?;
             writeln!(output).map_err(CarloError::output)?;
             if report.passed() {

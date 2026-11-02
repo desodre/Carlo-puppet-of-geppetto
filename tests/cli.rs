@@ -125,3 +125,18 @@ fn node_query_is_profile_guarded_and_never_advertises_decoded_hierarchy() {
             .contains("sensitive-value")
     );
 }
+
+#[cfg(not(target_os = "android"))]
+#[test]
+fn explicit_node_read_is_guarded_and_has_no_payload_on_unsupported_host() {
+    let output = command(&["node-read-probe"]);
+    assert_eq!(output.status.code(), Some(69));
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["outcome"]["error"]["kind"], "unsupported_profile");
+    assert!(report.get("node").is_none());
+    assert_eq!(report["hierarchy_available"], false);
+    assert_eq!(
+        command(&["node-read-probe", "--all"]).status.code(),
+        Some(64)
+    );
+}
