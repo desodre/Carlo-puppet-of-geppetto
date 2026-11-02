@@ -42,16 +42,16 @@ unsafe extern "C" {
     fn dlclose(handle: *mut c_void) -> c_int;
 }
 
-struct Library(NonNull<c_void>);
+pub(crate) struct Library(NonNull<c_void>);
 
 impl Library {
-    fn open(name: &CStr) -> Option<Self> {
+    pub(crate) fn open(name: &CStr) -> Option<Self> {
         const RTLD_NOW: c_int = 2;
         // SAFETY: name is terminated and lives through dlopen; RTLD_NOW is Bionic/POSIX's 2.
         NonNull::new(unsafe { dlopen(name.as_ptr(), RTLD_NOW) }).map(Self)
     }
 
-    fn symbol(&self, name: &CStr) -> Option<NonNull<c_void>> {
+    pub(crate) fn symbol(&self, name: &CStr) -> Option<NonNull<c_void>> {
         // SAFETY: self owns an open handle, and name is terminated for this call.
         // The address is never dereferenced until its specific ABI is established below.
         NonNull::new(unsafe { dlsym(self.0.as_ptr(), name.as_ptr()) })

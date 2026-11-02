@@ -1,9 +1,12 @@
 # Carlo — plano inicial de implementação
 
-Data do plano: 2026-10-31. Estado: P0 integrado; P1.1 com prova de lookup/ping Binder
-API 34 x86_64. Projeto Rust 2024, versão 0.1.0, CLI e cross-builds Android.
-Hierarquia, captura e protocolo seguem pendentes.
-[Evidência e decisão P1.1](docs/validation/p1-1-binder.md).
+Data do plano: 2026-10-31. Estado: P0 integrado; provas de lookup Binder e
+registro/init/unregister em API 34 x86_64. Projeto Rust 2024, versão 0.1.0, CLI e cross-builds Android.
+Consulta/callback (#22) e decoder mínimo (#23) têm prova no perfil API 34,
+incluindo texto atualizado em fixture controlada. Integração depende dos PRs abertos;
+hierarquia completa, captura e protocolo seguem pendentes.
+[Evidência P1.1](docs/validation/p1-1-binder.md) e
+[plano aplicado para sessão nativa](docs/plans/p1-accessibility-session.md).
 
 ## Objetivo e limites
 

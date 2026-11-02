@@ -1,0 +1,11 @@
+{
+  "native_tests_passed": true,
+  "same_process_resource_cycles": 20,
+  "art_runtime_mapped": false,
+  "conflict_refused_without_unregistering_owner": true,
+  "sigterm_unregister": true,
+  "sigint_unregister": true,
+  "sigkill_system_cleanup_and_recovery": true,
+  "host_timeout_cleanup": true,
+  "automation_active_after_checks": false
+}

@@ -1,0 +1,15 @@
+{
+  "serial": "emulator-5590",
+  "emulator": true,
+  "android_api": 34,
+  "abi": "x86_64",
+  "session_directory": "/data/local/tmp/carlo-09f813b1c17a40e98986d8e9ffb4496e",
+  "command": [
+    "accessibility-probe",
+    "--hold-ms",
+    "10000"
+  ],
+  "cleanup_removed": true,
+  "exit_code": 124,
+  "error": "agent command timed out"
+}

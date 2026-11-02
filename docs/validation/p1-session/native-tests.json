@@ -1,0 +1,15 @@
+{
+  "serial": "emulator-5580",
+  "emulator": true,
+  "android_api": 34,
+  "abi": "x86_64",
+  "session_directory": "/data/local/tmp/carlo-a9a07bc13dea488c894f8578f3ea0e9b",
+  "command": [
+    "--test-threads=1",
+    "--nocapture"
+  ],
+  "cleanup_removed": true,
+  "exit_code": 0,
+  "stdout": "\nrunning 15 tests\ntest accessibility::contract::tests::minimal_info_has_fixed_field_order_and_size ... ok\ntest accessibility::contract::tests::private_calls_require_exact_reference_profile ... ok\ntest accessibility::native::parcel_tests::ndk_init_reader_rejects_truncation_null_negative_id_and_trailing_data ... ok\ntest accessibility::native::tests::android_sessions_release_resources_and_refuse_competing_registration ... CARLO_RESOURCE_CYCLES [[7,4],[7,4],[7,4],[7,4],[7,4],[7,4],[7,4],[7,4],[7,4],[7,4],[7,4],[7,4],[7,4],[7,4],[7,4],[7,4],[7,4],[7,4],[7,4],[7,4]]\nok\ntest accessibility::state::tests::close_is_idempotent_and_late_duplicate_connections_are_released ... ok\ntest accessibility::state::tests::malformed_init_releases_all_read_references_and_never_becomes_ready ... ok\ntest binder::native::tests::loader_refuses_absent_libraries_and_reports_every_missing_symbol_without_calls ... ok\ntest binder::native::tests::lookup_releases_once_on_success_and_failed_ping_and_never_releases_null ... ok\ntest cli::tests::json_is_explicit_and_help_is_available_without_android ... ok\ntest cli::tests::rejects_options_that_could_be_silently_ignored ... ok\ntest diagnostics::tests::binder_probe_accepts_only_api34_shell_even_when_foundation_is_ready ... ok\ntest diagnostics::tests::foundation_never_advertises_unimplemented_android_features ... ok\ntest diagnostics::tests::host_cannot_pass_android_readiness_even_when_running_as_root ... ok\ntest diagnostics::tests::identity_uses_effective_uid_not_real_uid ... ok\ntest diagnostics::tests::refuses_old_api_unprivileged_uid_and_unsupported_architecture ... ok\n\ntest result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.33s\n\n",
+  "stderr": ""
+}

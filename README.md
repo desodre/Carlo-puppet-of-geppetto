@@ -6,9 +6,10 @@ Agente Android nativo em Rust para fornecer **hierarquia de interface** e
 **streaming de vídeo** ao [Geppetto](https://github.com/desodre/Geppetto).
 Arquitetura escolhida: Binder + NDK, executando como usuário `shell` por meio do ADB.
 
-**Estado atual:** P0 integrado e prova P1.1 de lookup/ping Binder validada no
-emulador API 34 x86_64. CLI, diagnóstico e builds Android disponíveis; hierarquia,
-captura e protocolo ainda não estão implementados. Versão de desenvolvimento:
+**Estado atual:** fundação nativa, lookup Binder e bootstrap de sessão de
+acessibilidade validados no emulador de referência API 34 x86_64. Registro, callback
+`init` e unregister funcionam sem Java. Hierarquia, captura e protocolo ainda
+não estão implementados. Versão de desenvolvimento:
 `0.1.0`, sem release publicada do agente completo.
 
 ## Propósito
@@ -70,7 +71,7 @@ com Geppetto. Vídeo sintético isolado não comprova captura da tela.
 
 | Alvo | Papel no desenvolvimento | Estado |
 |---|---|---|
-| Android 14/API 34, x86_64 | Primeira referência em emulador | Fundação e lookup/ping Binder validados |
+| Android 14/API 34, x86_64 | Primeira referência em emulador | Registro/init/unregister validados; hierarquia pendente |
 | arm64 em dispositivo físico | Validação em dispositivo físico | A validar após primeira referência |
 | APIs 35 e 36 | Próximos perfis de compatibilidade | Planejado |
 | APIs 29–33 | Avaliação posterior de viabilidade | Sem suporte anunciado |
@@ -110,8 +111,8 @@ execução. Alinhamento ELF não equivale a teste em kernel com páginas de 16 K
 A sessão recusa aparelho físico por padrão, valida API/ABI/hash e executa em
 diretório exclusivo, removido ao terminar. `--allow-physical` exige autorização
 prévia para esse aparelho. Os comandos disponíveis são `doctor`, `version`,
-`binder-probe` e `serve`; use `--report` para salvar evidência JSON e `--timeout`
-para prazo limitado.
+`binder-probe`, `accessibility-probe`, `accessibility-hold`, `node-query-probe`, `node-read-probe` e `serve`; use
+`--report` para salvar evidência JSON e `--timeout` para prazo limitado.
 Smoke test em emulador já iniciado:
 
 ```sh
@@ -139,6 +140,46 @@ python3 tools/binder_inventory.py --serial emulator-5554 \
 continua `false`. Chamadas Binder síncronas dependem do timeout do helper para
 encerramento forçado; o comando direto não oferece cancelamento interno.
 [Decisão, fontes e evidência P1.1](docs/validation/p1-1-binder.md).
+
+`accessibility-probe` registra uma sessão exclusiva, espera o callback `init` por
+até 5 segundos e faz unregister. Opcionalmente mantém a conexão por até 10 segundos:
+
+```sh
+cargo run -- accessibility-probe --hold-ms 1000
+python3 tools/android_session.py --serial emulator-5554 --command accessibility-probe
+```
+
+No host, `cargo run` valida a CLI e retorna indisponível. Para executar a prova,
+use o helper ADB no emulador. A chamada privada requer o fingerprint exato da imagem de referência; outro
+runtime recebe JSON indisponível/exit 69. Sessão concorrente é recusada. SIGINT e
+SIGTERM solicitam cleanup; o host mantém timeout para chamadas Binder presas.
+`hierarchy_available` continua `false`: conexão inicializada não significa leitura
+de nós. [Plano aplicado](docs/plans/p1-accessibility-session.md),
+[contratos e prova da sessão](docs/validation/p1-session.md).
+
+`node-query-probe` consulta e decodifica a raiz da janela ativa; emite apenas
+metadados (`fields_decoded=true`). Para receber os campos como dados em stdout:
+
+```sh
+python3 tools/android_session.py --serial emulator-5554 --command node-read-probe
+```
+
+`node-read-probe` inclui texto, pacote/classe, descrição, IDs, filhos, bounds e
+booleanos. Não salva ou registra conteúdo em logs do agente. O helper, quando
+invocado diretamente, imprime o JSON como dados do comando; `--report` persiste
+esse resultado se solicitado. O smoke da fixture compara dados em memória e salva
+apenas verificações sem texto.
+
+Decoder inicial API 34: strings UTF-8/UTF-16, texto simples, limites de parcel e
+coleções. Spans não vazios, TouchDelegate, ExtraRendering e referências Binder/FD
+retornam `unsupported_node_layout`. Bundles extras têm limites validados, mas seu
+conteúdo é omitido (`extras_omitted=true`). Não há promessa de suporte a qualquer UI.
+
+Resultado nulo difere de `query_rejected` (janela/permissão/estado remoto não
+distinguíveis). A janela pode ficar disponível após init; a prova informa rejeição
+sem retry automático. Callback tem deadline de 5 s; host cobre Binder preso.
+Hierarquia completa/XML continuam pendentes. [Plano #23/#78](docs/plans/p1-node-decoder.md)
+e [validação](docs/validation/p1-node-decoder.md).
 
 Códigos do agente: 0 sucesso, 64 argumentos inválidos, 69 indisponível, 74 I/O/JSON.
 Timeout do helper retorna 124. Detalhes em [CONTRIBUTING.md](CONTRIBUTING.md).

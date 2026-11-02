@@ -13,6 +13,20 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md), [PLANO.md](PLANO.md) and the relevant i
 - `src/binder/native.rs` owns the API 34 probe C ABI. Resolve platform exports at runtime;
   add each new signature with pinned source and ownership evidence. Probe success only
   proves lookup/ping, not automation registration or hierarchy.
+- `src/accessibility/` implements the reference-profile registration proof. Private
+  transactions require the exact verified fingerprint/API/ABI/shell identity. The
+  executable owns its Binder pool; an existing foreign pool is refused.
+- After starting callbacks, keep the API table, class metadata and pool alive for
+  the process lifetime. Release all per-session parcels/Binder refs with RAII.
+  Close callback state before unregister; known conflict must not unregister others.
+- `src/accessibility/node.rs` decodes the pinned minimum node layout in safe Rust.
+  NDK marshal copies at most 64 KiB in memory and rejects Binder/FD-bearing parcels.
+  Reject unknown layouts/spans explicitly; never persist raw runtime parcel bytes.
+  `node-query-probe` emits metadata; only `node-read-probe` emits decoded command data.
+  Debug/diagnostics redact node contents. Each request owns isolated callback state
+  and a deadline; the target app may call it directly (not only system UID).
+- `tools/fixture/` is the controlled app under test, never an agent/Java bridge.
+  Fixture smoke refuses physical devices/existing packages and uninstalls its APK.
 - Report unavailable features honestly; a successful doctor check is not Binder compatibility.
 - Stdout is command data; errors/diagnostics go to stderr. Never log UI contents or secrets.
 
@@ -37,4 +51,7 @@ For native changes run `python3 tools/build_android.py` with the pinned NDK and
 record API/ABI actually executed. For Binder use the bounded `binder-probe` session
 and `tools/binder_inventory.py`; never run platform calls on an unvalidated profile.
 Use a disposable emulator by default; respect existing physical-device authorization and never infer permission for an unrelated device.
+Build/run `tools/build_accessibility_tests.py` and `tools/smoke_accessibility.py`
+for session changes on the disposable reference emulator; record executed tests,
+resource cycles, conflict and signal/forced-death recovery.
 Record checks and evidence in the PR. Build artifacts belong in ignored `dist/`/`target/`.

@@ -9,6 +9,9 @@ Usage: carlo <command>
 
 Commands:
   doctor [--json]  Report environment and implemented capabilities
+  accessibility-probe [--hold-ms N]  Register/wait/unregister (0..10000 ms hold)
+  node-query-probe  Decode active root; report metadata only (JSON)
+  node-read-probe   Emit decoded root as command data (includes UI text)
   binder-probe     API 34 shell Binder/ServiceManager proof (JSON)
   serve            Reserved for P3; currently returns unavailable (69)
   --version, -V    Show the package version
@@ -30,8 +33,17 @@ pub enum Command {
         /// Emit a single JSON document on stdout.
         json: bool,
     },
+    /// Exercise a reference-profile session; the executable owns the Binder pool.
+    AccessibilityProbe {
+        /// Bounded post-initialization hold before cleanup (milliseconds).
+        hold_ms: u32,
+    },
     /// Run the API 34 shell Binder proof, emitting JSON even on unavailability.
     BinderProbe,
+    /// Decode one root and emit metadata without UI contents.
+    NodeQueryProbe,
+    /// Emit decoded root data on stdout, never in diagnostics.
+    NodeReadProbe,
     /// Reserved entry point for the future session protocol.
     Serve,
 }
@@ -44,6 +56,27 @@ pub fn parse(arguments: impl IntoIterator<Item = String>) -> Result<Command, Car
     let mut arguments = arguments.into_iter();
     let first = arguments.next();
     let second = arguments.next();
+    if first.as_deref() == Some("accessibility-probe") {
+        let hold_ms = match second.as_deref() {
+            None => 0,
+            Some("--hold-ms") => arguments
+                .next()
+                .and_then(|value| value.parse::<u32>().ok())
+                .filter(|value| *value <= 10_000)
+                .ok_or(CarloError::InvalidArguments(
+                    "hold must be 0..10000 milliseconds",
+                ))?,
+            _ => {
+                return Err(CarloError::InvalidArguments(
+                    "unknown accessibility probe option",
+                ));
+            }
+        };
+        if arguments.next().is_some() {
+            return Err(CarloError::InvalidArguments("too many arguments"));
+        }
+        return Ok(Command::AccessibilityProbe { hold_ms });
+    }
     if arguments.next().is_some() {
         return Err(CarloError::InvalidArguments("too many arguments"));
     }
@@ -52,6 +85,8 @@ pub fn parse(arguments: impl IntoIterator<Item = String>) -> Result<Command, Car
         (Some("--version" | "-V"), None) => Ok(Command::Version),
         (Some("doctor"), None) => Ok(Command::Doctor { json: false }),
         (Some("doctor"), Some("--json")) => Ok(Command::Doctor { json: true }),
+        (Some("node-read-probe"), None) => Ok(Command::NodeReadProbe),
+        (Some("node-query-probe"), None) => Ok(Command::NodeQueryProbe),
         (Some("binder-probe"), None) => Ok(Command::BinderProbe),
         (Some("serve"), None) => Ok(Command::Serve),
         _ => Err(CarloError::InvalidArguments(

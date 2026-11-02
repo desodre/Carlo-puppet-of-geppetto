@@ -19,6 +19,11 @@ COMMANDS = {
     "version": ["--version"],
     "serve": ["serve"],
     "binder-probe": ["binder-probe"],
+    "node-query-probe": ["node-query-probe"],
+    "node-read-probe": ["node-read-probe"],
+    "accessibility-tests": ["--test-threads=1", "--nocapture"],
+    "accessibility-probe": ["accessibility-probe"],
+    "accessibility-hold": ["accessibility-probe", "--hold-ms", "10000"],
 }
 ABI_TARGETS = {"x86_64": "x86_64-linux-android", "arm64-v8a": "aarch64-linux-android"}
 

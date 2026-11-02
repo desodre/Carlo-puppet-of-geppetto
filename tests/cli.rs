@@ -75,3 +75,68 @@ fn binder_probe_reports_unsupported_host_without_claiming_hierarchy() {
     assert!(report["outcome"]["lookups"].as_array().unwrap().is_empty());
     assert_eq!(report["hierarchy_available"], false);
 }
+
+#[cfg(not(target_os = "android"))]
+#[test]
+fn accessibility_probe_does_not_attempt_private_calls_on_host() {
+    let output = command(&["accessibility-probe"]);
+    assert_eq!(output.status.code(), Some(69));
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["outcome"]["error"]["kind"], "unsupported_profile");
+    assert_eq!(report["hierarchy_available"], false);
+    assert_eq!(report["outcome"]["initialized"], false);
+}
+
+#[test]
+fn accessibility_hold_is_bounded_and_invalid_values_are_not_echoed() {
+    for args in [
+        vec!["accessibility-probe", "--hold-ms", "10001"],
+        vec!["accessibility-probe", "--hold-ms", "-1"],
+        vec!["accessibility-probe", "--hold-ms"],
+        vec!["accessibility-probe", "--hold-ms", "0", "extra"],
+        vec!["accessibility-probe", "sensitive-value"],
+    ] {
+        let output = command(&args);
+        assert_eq!(output.status.code(), Some(64));
+        assert!(output.stdout.is_empty());
+        assert!(
+            !String::from_utf8(output.stderr)
+                .unwrap()
+                .contains("sensitive-value")
+        );
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+#[test]
+fn node_query_is_profile_guarded_and_never_advertises_decoded_hierarchy() {
+    let output = command(&["node-query-probe"]);
+    assert_eq!(output.status.code(), Some(69));
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["outcome"]["error"]["kind"], "unsupported_profile");
+    assert_eq!(report["hierarchy_available"], false);
+    assert!(report["outcome"].get("query").is_none());
+    let invalid = command(&["node-query-probe", "sensitive-value"]);
+    assert_eq!(invalid.status.code(), Some(64));
+    assert!(invalid.stdout.is_empty());
+    assert!(
+        !String::from_utf8(invalid.stderr)
+            .unwrap()
+            .contains("sensitive-value")
+    );
+}
+
+#[cfg(not(target_os = "android"))]
+#[test]
+fn explicit_node_read_is_guarded_and_has_no_payload_on_unsupported_host() {
+    let output = command(&["node-read-probe"]);
+    assert_eq!(output.status.code(), Some(69));
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["outcome"]["error"]["kind"], "unsupported_profile");
+    assert!(report.get("node").is_none());
+    assert_eq!(report["hierarchy_available"], false);
+    assert_eq!(
+        command(&["node-read-probe", "--all"]).status.code(),
+        Some(64)
+    );
+}

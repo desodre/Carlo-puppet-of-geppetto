@@ -120,7 +120,8 @@ python3 tools/android_session.py --serial emulator-5554 --command binder-probe \
   --timeout 15 --report results/p1-1-probe-session.json
 python3 tools/binder_inventory.py --serial emulator-5554 \
   --output results/p1-1-binder-symbols.json
-python3 tools/smoke_android.py --serial emulator-5554 --output results/p0-regression
+python3 tools/smoke_android.py --serial emulator-5554 --manifest dist/manifest.json \
+  --output results/p0-regression
 ```
 
 Validados: 14 testes Rust e 17 testes Python, incluindo referência liberada uma

@@ -46,6 +46,8 @@ jobs:
           cargo clippy --locked --all-targets --target aarch64-linux-android -- -D warnings
       - name: Build and verify both Android ABIs
         run: python3 tools/build_android.py
+      - name: Build reference Android test harness
+        run: python3 tools/build_accessibility_tests.py
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: carlo-android-native
