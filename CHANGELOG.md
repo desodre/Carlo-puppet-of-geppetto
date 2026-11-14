@@ -11,6 +11,12 @@
 - Document verified CI acceptance for host checks, both Android ABI checks/builds
   and native test harness artifacts (#78); device execution remains a separate check.
 
+- Add protocol v1 framing: 16-byte big-endian header (magic, version, kind,
+  request ID, length) for JSON control and raw XML/video payloads (#33).
+- Validate length per kind before reading or allocating; define responses for
+  fragmented reads, EOF, other versions, oversized and unknown frames (#34).
+  Agent and host codecs share fixture vectors. Transport and `serve` stay unimplemented.
+
 - Add reference-profile `node-query-probe`: one active-root request, isolated callback,
   interaction-ID correlation, bounded envelope/deadline and explicit null/rejection
   results. Node fields remain undecoded (#23); hierarchy capability stays unavailable.

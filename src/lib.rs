@@ -7,6 +7,7 @@ pub mod binder;
 pub mod cli;
 pub mod diagnostics;
 pub mod error;
+pub mod protocol;
 
 use std::io::Write;
 
