@@ -172,7 +172,14 @@ impl Diagnostics {
 
     // P1.1 is deliberately restricted to the first reference profile and shell identity.
     pub(crate) fn api34_shell(&self) -> bool {
-        self.foundation_ready && self.android_api == Some(34) && self.effective_uid == Some(2000)
+        self.shell_api() == Some(34)
+    }
+
+    /// Android API level when the foundation is ready and the process runs as shell.
+    pub(crate) fn shell_api(&self) -> Option<u32> {
+        (self.foundation_ready && self.effective_uid == Some(2000))
+            .then_some(self.android_api)
+            .flatten()
     }
 
     /// Write a human-readable report without logging UI content or credentials.

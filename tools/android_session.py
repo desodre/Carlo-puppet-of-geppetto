@@ -21,10 +21,15 @@ COMMANDS = {
     "binder-probe": ["binder-probe"],
     "node-query-probe": ["node-query-probe"],
     "node-read-probe": ["node-read-probe"],
+    "video-encode-probe": ["video-encode-probe"],
+    "video-encode-dump": ["video-encode-dump"],
     "accessibility-tests": ["--test-threads=1", "--nocapture"],
+    "video-tests": ["video::native::", "--test-threads=1", "--nocapture"],
     "accessibility-probe": ["accessibility-probe"],
     "accessibility-hold": ["accessibility-probe", "--hold-ms", "10000"],
 }
+# Stdout of these commands is raw bytes: it goes to a caller-chosen file, never a report.
+BINARY_COMMANDS = {"video-encode-dump"}
 ABI_TARGETS = {"x86_64": "x86_64-linux-android", "arm64-v8a": "aarch64-linux-android"}
 
 # Caller data is passed as positional shell arguments, never interpolated as code.
@@ -70,17 +75,19 @@ class Adb:
     def __init__(self, serial: str):
         self.serial = serial
 
-    def run(self, args: list[str], *, timeout: float = 15, check: bool = True):
+    def run(self, args: list[str], *, timeout: float = 15, check: bool = True, text: bool = True):
         return subprocess.run(
             ["adb", "-s", self.serial, *args],
             capture_output=True,
-            text=True,
+            text=text,
             timeout=timeout,
             check=check,
         )
 
-    def shell(self, args: list[str], *, timeout: float = 15, check: bool = True):
-        return self.run(["shell", "-T", shlex.join(args)], timeout=timeout, check=check)
+    def shell(self, args: list[str], *, timeout: float = 15, check: bool = True, text: bool = True):
+        return self.run(
+            ["shell", "-T", shlex.join(args)], timeout=timeout, check=check, text=text
+        )
 
 
 def cleanup(adb: Adb, directory: str) -> None:
@@ -97,8 +104,16 @@ def cleanup(adb: Adb, directory: str) -> None:
 
 
 def run_session(
-    adb: Adb, manifest_path: Path, command: str, timeout: float, allow_physical: bool
+    adb: Adb,
+    manifest_path: Path,
+    command: str,
+    timeout: float,
+    allow_physical: bool,
+    binary_output: Path | None = None,
 ) -> dict:
+    raw_stdout = command in BINARY_COMMANDS
+    if raw_stdout != (binary_output is not None):
+        raise SessionError("binary output file is required for, and only for, binary commands")
     emulator = adb.shell(["getprop", "ro.kernel.qemu"]).stdout.strip() == "1"
     if not emulator and not allow_physical:
         raise SessionError(
@@ -144,10 +159,23 @@ def run_session(
             ],
             timeout=timeout,
             check=False,
+            text=not raw_stdout,
         )
-        report.update(
-            {"exit_code": result.returncode, "stdout": result.stdout, "stderr": result.stderr}
-        )
+        if raw_stdout:
+            binary_output.parent.mkdir(parents=True, exist_ok=True)
+            binary_output.write_bytes(result.stdout)
+            report.update(
+                {
+                    "exit_code": result.returncode,
+                    "stdout_bytes": len(result.stdout),
+                    "stdout_sha256": hashlib.sha256(result.stdout).hexdigest(),
+                    "stderr": result.stderr.decode(errors="replace"),
+                }
+            )
+        else:
+            report.update(
+                {"exit_code": result.returncode, "stdout": result.stdout, "stderr": result.stderr}
+            )
     except subprocess.TimeoutExpired:
         report.update({"exit_code": 124, "error": "agent command timed out"})
     except (subprocess.SubprocessError, OSError) as error:
@@ -174,6 +202,7 @@ def main() -> None:
     parser.add_argument("--timeout", type=float, default=15)
     parser.add_argument("--allow-physical", action="store_true")
     parser.add_argument("--report", type=Path)
+    parser.add_argument("--binary-output", type=Path, help="file for raw stdout of binary commands")
     args = parser.parse_args()
     if not 0 < args.timeout <= 300:
         parser.error("timeout must be finite and in (0, 300] seconds")
@@ -184,6 +213,7 @@ def main() -> None:
             args.command,
             args.timeout,
             args.allow_physical,
+            args.binary_output,
         )
     except (SessionError, OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
         parser.exit(1, f"carlo-session: {error}\n")

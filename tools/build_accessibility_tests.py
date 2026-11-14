@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the API 34 x86_64 Rust library test harness with the pinned toolchains."""
+"""Build the Android Rust library test harness with the pinned toolchains."""
 
 import argparse
 import hashlib
@@ -13,10 +13,14 @@ from android_session import ROOT
 from build_android import execute, ndk_revision
 
 
+TARGETS = ["x86_64-linux-android", "aarch64-linux-android"]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--ndk", type=Path, default=os.environ.get("ANDROID_NDK_HOME"))
     parser.add_argument("--output", type=Path, default=ROOT / "dist/native-tests")
+    parser.add_argument("--target", choices=TARGETS, default="x86_64-linux-android")
     args = parser.parse_args()
     if args.ndk is None:
         parser.error("pass --ndk or set ANDROID_NDK_HOME")
@@ -32,11 +36,11 @@ def main():
     if host is None:
         parser.error("Linux or macOS host required")
     tools = ndk / "toolchains/llvm/prebuilt" / host / "bin"
-    target = "x86_64-linux-android"
+    target = args.target
     env = os.environ.copy()
-    env["CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER"] = str(tools / "clang")
+    env["CARGO_TARGET_" + target.upper().replace("-", "_") + "_LINKER"] = str(tools / "clang")
     env["CARGO_ENCODED_RUSTFLAGS"] = "\x1f".join([
-        "-C", f"link-arg=--target=x86_64-linux-android{config['android_api']}",
+        "-C", f"link-arg=--target={target}{config['android_api']}",
         "-C", f"link-arg=-Wl,-z,max-page-size={config['elf_page_size']}",
     ])
     result = execute(["cargo", "test", "--locked", "--lib", "--target", target,

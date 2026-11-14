@@ -111,8 +111,10 @@ execução. Alinhamento ELF não equivale a teste em kernel com páginas de 16 K
 A sessão recusa aparelho físico por padrão, valida API/ABI/hash e executa em
 diretório exclusivo, removido ao terminar. `--allow-physical` exige autorização
 prévia para esse aparelho. Os comandos disponíveis são `doctor`, `version`,
-`binder-probe`, `accessibility-probe`, `accessibility-hold`, `node-query-probe`, `node-read-probe` e `serve`; use
+`binder-probe`, `accessibility-probe`, `accessibility-hold`, `node-query-probe`, `node-read-probe`,
+`video-encode-probe`, `video-encode-dump`, `video-tests` e `serve`; use
 `--report` para salvar evidência JSON e `--timeout` para prazo limitado.
+Comandos de saída binária (`video-encode-dump`) exigem `--binary-output <arquivo>`.
 Smoke test em emulador já iniciado:
 
 ```sh
@@ -174,6 +176,21 @@ Decoder inicial API 34: strings UTF-8/UTF-16, texto simples, limites de parcel e
 coleções. Spans não vazios, TouchDelegate, ExtraRendering e referências Binder/FD
 retornam `unsupported_node_layout`. Bundles extras têm limites validados, mas seu
 conteúdo é omitido (`extras_omitted=true`). Não há promessa de suporte a qualquer UI.
+
+`video-encode-probe` codifica 30 quadros gerados por EGL/GLES (360×640, 15 fps,
+1,5 Mbit/s) com AMediaCodec e emite apenas metadados do stream; `video-encode-dump`
+emite o H.264 Annex B em stdout. Os quadros são sintéticos: nenhum display é lido,
+`screen_capture` e `video_available` permanecem `false`. Disponível só no perfil
+executado (API 36 arm64, `shell`); os demais retornam `unsupported_profile`.
+
+```sh
+python3 tools/build_accessibility_tests.py --target aarch64-linux-android
+python3 tools/smoke_video_encoder.py --serial <serial> --allow-physical \
+  --tests-manifest dist/native-tests/manifest.json --output results/video-encoder
+```
+
+O smoke exige `ffmpeg`/`ffprobe` no host e confere contagem de quadros, dimensões e
+o padrão desenhado. [Prova do encoder sintético](docs/validation/p2-1-synthetic-encoder.md).
 
 Resultado nulo difere de `query_rejected` (janela/permissão/estado remoto não
 distinguíveis). A janela pode ficar disponível após init; a prova informa rejeição
