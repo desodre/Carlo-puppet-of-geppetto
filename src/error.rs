@@ -23,6 +23,8 @@ pub enum CarloError {
     },
     /// JSON serialization failed, preserving the original cause.
     Json(serde_json::Error),
+    /// The `serve` session was refused or ended abnormally.
+    Serve(crate::serve::Error),
 }
 
 impl CarloError {
@@ -42,6 +44,7 @@ impl CarloError {
             | Self::UnsuitableEnvironment
             | Self::InvalidEnvironment(_) => 69,
             Self::Io { .. } | Self::Json(_) => 74,
+            Self::Serve(error) => error.exit_code(),
         }
     }
 
@@ -66,6 +69,7 @@ impl fmt::Display for CarloError {
             }
             Self::Io { operation, source } => write!(f, "{operation}: {source}"),
             Self::Json(source) => write!(f, "serialize report: {source}"),
+            Self::Serve(error) => write!(f, "serve: {error}"),
         }
     }
 }
@@ -75,6 +79,7 @@ impl std::error::Error for CarloError {
         match self {
             Self::Io { source, .. } => Some(source),
             Self::Json(source) => Some(source),
+            Self::Serve(source) => Some(source),
             _ => None,
         }
     }
@@ -83,5 +88,11 @@ impl std::error::Error for CarloError {
 impl From<serde_json::Error> for CarloError {
     fn from(source: serde_json::Error) -> Self {
         Self::Json(source)
+    }
+}
+
+impl From<crate::serve::Error> for CarloError {
+    fn from(source: crate::serve::Error) -> Self {
+        Self::Serve(source)
     }
 }

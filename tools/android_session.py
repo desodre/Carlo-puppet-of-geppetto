@@ -17,7 +17,6 @@ ROOT = Path(__file__).resolve().parents[1]
 COMMANDS = {
     "doctor": ["doctor", "--json"],
     "version": ["--version"],
-    "serve": ["serve"],
     "binder-probe": ["binder-probe"],
     "node-query-probe": ["node-query-probe"],
     "node-read-probe": ["node-read-probe"],
@@ -93,6 +92,16 @@ class Adb:
             ["shell", "-T", shlex.join(args)], timeout=timeout, check=check, text=text
         )
 
+    def popen(self, args: list[str]) -> subprocess.Popen:
+        """Start a device command without waiting; the caller bounds and reaps it."""
+        return subprocess.Popen(
+            ["adb", "-s", self.serial, "shell", "-T", shlex.join(args)],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            bufsize=0,
+        )
+
 
 def cleanup(adb: Adb, directory: str) -> None:
     if re.fullmatch(r"/data/local/tmp/carlo-[0-9a-f]{32}", directory) is None:
@@ -107,17 +116,8 @@ def cleanup(adb: Adb, directory: str) -> None:
     raise SessionError("session processes did not exit after cleanup")
 
 
-def run_session(
-    adb: Adb,
-    manifest_path: Path,
-    command: str,
-    timeout: float,
-    allow_physical: bool,
-    binary_output: Path | None = None,
-) -> dict:
-    raw_stdout = command in BINARY_COMMANDS
-    if raw_stdout != (binary_output is not None):
-        raise SessionError("binary output file is required for, and only for, binary commands")
+def resolve_artifact(adb: Adb, manifest_path: Path, allow_physical: bool) -> tuple[Path, dict]:
+    """Authorize the device and pick the verified artifact for its ABI; changes nothing."""
     emulator = adb.shell(["getprop", "ro.kernel.qemu"]).stdout.strip() == "1"
     if not emulator and not allow_physical:
         raise SessionError(
@@ -135,22 +135,41 @@ def run_session(
     binary = manifest_path.parent / artifact["file"]
     if hashlib.sha256(binary.read_bytes()).hexdigest() != artifact["sha256"]:
         raise SessionError("artifact SHA-256 does not match manifest")
+    return binary, {"serial": adb.serial, "emulator": emulator, "android_api": api, "abi": abi}
+
+
+def create_directory(adb: Adb) -> str:
+    """Create an exclusive 0700 session directory. Ownership starts only after
+    mkdir succeeds; never clean an existing path on failure."""
     directory = "/data/local/tmp/carlo-" + uuid.uuid4().hex
-    report = {
-        "serial": adb.serial,
-        "emulator": emulator,
-        "android_api": api,
-        "abi": abi,
-        "session_directory": directory,
-        "command": COMMANDS[command],
-        "cleanup_removed": False,
-    }
-    # Ownership starts only after mkdir succeeds; never clean an existing path on failure.
     adb.shell(["mkdir", "-m", "700", directory])
+    return directory
+
+
+def deploy(adb: Adb, binary: Path, directory: str) -> None:
+    adb.run(["push", str(binary), directory + "/carlo"])
+    adb.shell(["chmod", "700", directory + "/carlo"])
+
+
+def run_session(
+    adb: Adb,
+    manifest_path: Path,
+    command: str,
+    timeout: float,
+    allow_physical: bool,
+    binary_output: Path | None = None,
+) -> dict:
+    raw_stdout = command in BINARY_COMMANDS
+    if raw_stdout != (binary_output is not None):
+        raise SessionError("binary output file is required for, and only for, binary commands")
+    binary, report = resolve_artifact(adb, manifest_path, allow_physical)
+    directory = create_directory(adb)
+    report.update(
+        {"session_directory": directory, "command": COMMANDS[command], "cleanup_removed": False}
+    )
     failure = None
     try:
-        adb.run(["push", str(binary), directory + "/carlo"])
-        adb.shell(["chmod", "700", directory + "/carlo"])
+        deploy(adb, binary, directory)
         result = adb.shell(
             [
                 "sh",

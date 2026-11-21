@@ -81,8 +81,10 @@ class SessionTests(unittest.TestCase):
 
     def test_nonzero_agent_exit_keeps_its_code_and_cleans_session(self):
         adb = FakeAdb()
-        result = run_session(adb, self.manifest, "serve", 1, False)
+        result = run_session(adb, self.manifest, "doctor", 1, False)
         self.assertEqual(result["exit_code"], 69)
+        # A blocking `serve` has no place in a run-to-completion session.
+        self.assertNotIn("serve", COMMANDS)
         self.assertTrue(result["cleanup_removed"])
         self.assertTrue(any(len(call) > 3 and call[3] == "carlo-cleanup" for call in adb.calls))
 

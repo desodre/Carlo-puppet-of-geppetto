@@ -1,14 +1,17 @@
 //! Native Android agent foundations: command parsing, diagnostics and typed errors.
 //!
 //! Binder lookup and a synthetic H.264 encoder have probes. A display mirror proof
-//! and its classified failures exist for one pinned build only. Hierarchy,
-//! streaming and serve are not implemented.
+//! and its classified failures exist for one pinned build only. `serve` offers a
+//! one-client control channel (handshake, ping, capabilities, shutdown) over a
+//! Unix socket; hierarchy and streaming commands are not implemented.
 
 mod accessibility;
 pub mod binder;
 pub mod cli;
 pub mod diagnostics;
 pub mod error;
+pub mod protocol;
+pub mod serve;
 mod video;
 
 use std::io::Write;
@@ -21,7 +24,7 @@ use error::CarloError;
 ///
 /// # Errors
 /// Returns [`CarloError`] for I/O/serialization failures, an unsuitable foundation
-/// environment, an unsuccessful Binder probe, or the unimplemented `serve` command.
+/// environment, an unsuccessful Binder probe, or a refused or failed `serve` session.
 /// Doctor and Binder probe write their reports before returning unavailable errors.
 pub fn run(command: Command, output: &mut impl Write) -> Result<(), CarloError> {
     match command {
@@ -143,8 +146,6 @@ pub fn run(command: Command, output: &mut impl Write) -> Result<(), CarloError> 
                 ))
             }
         }
-        Command::Serve => Err(CarloError::UnsupportedFeature(
-            "serve protocol is planned in P3",
-        )),
+        Command::Serve { session_dir } => serve::run(&session_dir, output),
     }
 }

@@ -48,6 +48,11 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md), [PLANO.md](PLANO.md) and the relevant i
 - `src/protocol.rs` owns v1 framing only; `docs/protocol.md` is the contract.
   Validate the whole header before reading or allocating payload. Change the wire
   format together with `tools/carlo_protocol.py` and the shared fixture vectors.
+- `src/serve/` is the control channel: one client, peer credentials checked before
+  any read, session id required in `hello`, every wait bounded. The socket file in
+  the session directory is preferred; the abstract fallback applies only when bind
+  is denied (the executed Samsung build refuses socket files under /data/local/tmp).
+  Never report a capability the doctor source does not; never log the session id.
 - Stdout is command data; errors/diagnostics go to stderr. Never log UI contents or secrets.
 
 ## Workflow

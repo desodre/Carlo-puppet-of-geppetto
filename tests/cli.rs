@@ -21,15 +21,35 @@ fn version_has_one_source_and_no_error_output() {
 }
 
 #[test]
-fn unavailable_serve_is_not_a_fake_running_agent() {
-    let output = command(&["serve"]);
-    assert_eq!(output.status.code(), Some(69));
-    assert!(output.stdout.is_empty());
+fn serve_that_cannot_start_is_not_a_fake_running_agent() {
+    // No ready line, no success and no socket unless a session really exists.
+    let missing = std::env::temp_dir().join(format!("carlo-cli-missing-{}", std::process::id()));
+    let refused = command(&["serve", "--session-dir", missing.to_str().unwrap()]);
+    assert_eq!(refused.status.code(), Some(69));
+    assert!(refused.stdout.is_empty());
     assert!(
-        String::from_utf8(output.stderr)
+        String::from_utf8(refused.stderr)
             .unwrap()
-            .contains("planned in P3")
+            .contains("session directory does not exist")
     );
+    assert!(!missing.exists());
+    let bare = command(&["serve"]);
+    assert_eq!(bare.status.code(), Some(64));
+    assert!(bare.stdout.is_empty());
+    assert!(
+        String::from_utf8(bare.stderr)
+            .unwrap()
+            .contains("--session-dir")
+    );
+    let doctor = command(&["doctor", "--json"]);
+    let report: serde_json::Value = serde_json::from_slice(&doctor.stdout).unwrap();
+    let serve = report["capabilities"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|capability| capability["name"] == "serve_protocol")
+        .unwrap();
+    assert_eq!(serve["available"], false);
 }
 
 #[test]

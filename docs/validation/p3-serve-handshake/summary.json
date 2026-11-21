@@ -1,0 +1,97 @@
+{
+  "date": "2026-11-21",
+  "consecutive_passing_runs": 3,
+  "emulator": false,
+  "android_api": 36,
+  "abi": "arm64-v8a",
+  "transport": "abstract",
+  "filesystem_socket_exposed": false,
+  "cases": [
+    {
+      "case": "complete",
+      "forward_removed": true,
+      "session_id_length": 32,
+      "transport": "abstract",
+      "socket_mode": null,
+      "hello_ok": true,
+      "capabilities": 4,
+      "capabilities_available": 0,
+      "socket_removed_after_accept": true,
+      "reserved_unavailable": 5,
+      "unknown_kind_recovered": true,
+      "requests": 12,
+      "exit_code": 0,
+      "stderr_bytes": 0,
+      "socket_present_after_exit": false,
+      "cleanup_removed": true
+    },
+    {
+      "case": "wrong_session",
+      "forward_removed": true,
+      "session_id_length": 32,
+      "transport": "abstract",
+      "socket_mode": null,
+      "rejected": "invalid_session",
+      "closed": true,
+      "exit_code": 74,
+      "stderr_bytes": 50,
+      "socket_present_after_exit": false,
+      "cleanup_removed": true
+    },
+    {
+      "case": "bad_magic",
+      "forward_removed": true,
+      "session_id_length": 32,
+      "transport": "abstract",
+      "socket_mode": null,
+      "rejected": "bad_magic",
+      "closed": true,
+      "exit_code": 74,
+      "stderr_bytes": 43,
+      "socket_present_after_exit": false,
+      "cleanup_removed": true
+    }
+  ],
+  "agent_manifest": {
+    "schema_version": 1,
+    "agent_version": "0.1.0",
+    "rustc": "rustc 1.96.0 (ac68faa20 2026-05-25)",
+    "ndk_version": "28.2.13676358",
+    "android_api": 29,
+    "reference_api": 34,
+    "artifacts": [
+      {
+        "target": "x86_64-linux-android",
+        "file": "x86_64-linux-android/carlo",
+        "sha256": "509d186847e2b0f0b9917ee51a84eae961b2575bbb9beddb8533f1f10fded0c1",
+        "bytes": 741696,
+        "needed": [
+          "libdl.so",
+          "libc.so"
+        ],
+        "load_alignments": [
+          16384,
+          16384,
+          16384,
+          16384
+        ]
+      },
+      {
+        "target": "aarch64-linux-android",
+        "file": "aarch64-linux-android/carlo",
+        "sha256": "92861d39c269bca1a568a70efc97c0c33ca2c527bf3c160d9fbbb864bbf47f6d",
+        "bytes": 745320,
+        "needed": [
+          "libdl.so",
+          "libc.so"
+        ],
+        "load_alignments": [
+          16384,
+          16384,
+          16384,
+          16384
+        ]
+      }
+    ]
+  }
+}
