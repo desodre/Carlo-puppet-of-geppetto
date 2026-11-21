@@ -175,3 +175,36 @@ fn explicit_node_read_is_guarded_and_has_no_payload_on_unsupported_host() {
         Some(64)
     );
 }
+
+#[cfg(not(target_os = "android"))]
+#[test]
+fn hierarchy_commands_are_profile_guarded_and_never_emit_partial_xml() {
+    let probe = command(&["hierarchy-probe"]);
+    assert_eq!(probe.status.code(), Some(69));
+    let report: serde_json::Value = serde_json::from_slice(&probe.stdout).unwrap();
+    assert_eq!(report["error"]["kind"], "unsupported_profile");
+    assert_eq!(report["profile"], serde_json::Value::Null);
+    // Nothing was registered, so no registration flags were sent.
+    assert_eq!(report["registration_flags"], serde_json::Value::Null);
+    assert_eq!(report["session"]["initialized"], false);
+    assert_eq!(report["snapshot"], serde_json::Value::Null);
+    assert_eq!(report["executed"], false);
+    assert!(report.get("document").is_none());
+    let dump = command(&["hierarchy-dump"]);
+    assert_eq!(dump.status.code(), Some(69));
+    assert!(dump.stdout.is_empty());
+    assert!(!String::from_utf8(dump.stderr).unwrap().contains('<'));
+    for arguments in [
+        vec!["hierarchy-probe", "sensitive-value"],
+        vec!["hierarchy-dump", "--window", "sensitive-value"],
+    ] {
+        let invalid = command(&arguments);
+        assert_eq!(invalid.status.code(), Some(64));
+        assert!(invalid.stdout.is_empty());
+        assert!(
+            !String::from_utf8(invalid.stderr)
+                .unwrap()
+                .contains("sensitive-value")
+        );
+    }
+}

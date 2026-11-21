@@ -1,11 +1,25 @@
 //! A new callback capability for each request, never published in ServiceManager.
 //! Android forwards it to the target app; unlike session init, caller is not
 //! necessarily system UID. Diagnostics exclude payload text and raw parcels.
+//!
+//! The callback wakes the requester through a condition variable whose state is
+//! checked under the same mutex, so an answer is never missed and never waits
+//! for a poll tick; the 20 ms slice only bounds how late a signal is noticed.
 use super::*;
-use crate::accessibility::query::{Envelope, Pending};
+use crate::accessibility::query::{Awaiting, Envelope, Reply};
+
+/// Which answers a request accepts; fixed when its callback object is created.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Kind {
+    /// API 34: one code-1 envelope, at most 64 KiB.
+    Single,
+    /// API 36: a code-1 node or a code-2 list, at most `MAX_BATCH_BYTES`.
+    Batch,
+}
 
 struct Query {
-    pending: Mutex<Pending>,
+    kind: Kind,
+    pending: Mutex<Awaiting<Reply>>,
     changed: Condvar,
 }
 struct Active(Arc<Query>);
@@ -30,26 +44,39 @@ pub(super) unsafe extern "C" fn callback(
     std::panic::catch_unwind(|| dispatch(binder, code, parcel)).unwrap_or(-22)
 }
 fn dispatch(binder: *mut Binder, code: u32, parcel: *const Parcel) -> i32 {
-    if code != contract::NODE_RESULT {
-        return -74;
-    }
+    // The request kind is only known from the user data; until it is read, an
+    // unusable dispatch answers what the single-node handler always answered.
+    let unusable = if code == contract::NODE_RESULT {
+        -22
+    } else {
+        -74
+    };
     let Ok(api) = Api::global() else {
-        return -22;
+        return unusable;
     };
     if binder.is_null() || parcel.is_null() {
-        return -22;
+        return unusable;
     }
     // SAFETY: NDK dispatch keeps binder/user data alive until callback returns.
     let data = unsafe { (api.user_data)(binder) };
     if data.is_null() {
-        return -22;
+        return unusable;
     }
     // SAFETY: only our query class uses this handler and this exact Arc type.
     let shared = unsafe { &*data.cast::<Arc<Query>>() };
-    let result = read_envelope(
-        api,
-        NonNull::new(parcel.cast_mut()).expect("non-null checked"),
-    );
+    let parcel = NonNull::new(parcel.cast_mut()).expect("non-null checked");
+    let result = match (shared.kind, code) {
+        (Kind::Single, contract::NODE_RESULT) => {
+            read_envelope(api, parcel).map(|envelope| Reply::Single(Box::new(envelope)))
+        }
+        (Kind::Batch, contract::NODE_RESULT | contract::NODE_RESULTS) => {
+            read_batch(api, code, parcel).map(Reply::Batch)
+        }
+        // Prefetch continuation: never requested (every batch request is
+        // uninterruptible), accepted and dropped without reading it.
+        (Kind::Batch, contract::PREFETCH_RESULT) => return 0,
+        _ => return -74,
+    };
     let invalid = result.is_err();
     let Ok(mut pending) = shared.pending.lock() else {
         return -22;
@@ -84,29 +111,56 @@ fn read_envelope(api: &'static Api, parcel: NonNull<Parcel>) -> Result<Envelope,
     crate::accessibility::node::decode(&bytes)
 }
 
+/// Copy the unread rest of a parcel, at most `max` bytes in total, without
+/// persisting it. `Err(None)` means the parcel carries Binder or FD objects.
+pub(super) fn copy_rest(
+    api: &'static Api,
+    parcel: NonNull<Parcel>,
+    max: i32,
+) -> Result<Vec<u8>, Option<Error>> {
+    // SAFETY: borrowed live parcel; metadata queries preserve ownership and cursor.
+    let (start, end) = unsafe {
+        (
+            (api.data_position)(parcel.as_ptr()),
+            (api.data_size)(parcel.as_ptr()),
+        )
+    };
+    if start < 0 || end < start || end > max {
+        return Err(Some(Error::InvalidCallback));
+    }
+    let len = (end - start) as usize;
+    // The total size was bounded above, before this allocation.
+    let mut bytes = vec![0_u8; len];
+    if len == 0 {
+        return Ok(bytes);
+    }
+    // SAFETY: destination has len writable bytes; start/len were validated against
+    // this live parcel. The NDK rejects Binder/FD objects and re-checks the bounds.
+    let result = unsafe { (api.marshal)(parcel.as_ptr(), bytes.as_mut_ptr(), start as usize, len) };
+    if result == -38 {
+        return Err(None);
+    }
+    status("marshal", result).map_err(Some)?;
+    Ok(bytes)
+}
+
+fn read_batch(
+    api: &'static Api,
+    code: u32,
+    parcel: NonNull<Parcel>,
+) -> Result<crate::accessibility::node::Batch, Error> {
+    let bytes = copy_rest(api, parcel, contract::MAX_BATCH_BYTES).map_err(|error| {
+        error.unwrap_or(Error::UnsupportedNodeField {
+            field: "callback",
+            reason: "binder_or_fd_objects",
+        })
+    })?;
+    crate::accessibility::node::decode36(code, &bytes)
+}
+
 impl Session {
-    /// &mut self serializes requests. No detached workers or unbounded result queue.
-    pub(super) fn query_node(
-        &mut self,
-        window: i32,
-        node: i64,
-        timeout: Duration,
-    ) -> Result<Envelope, Error> {
-        let deadline = Instant::now()
-            .checked_add(timeout)
-            .ok_or(Error::Runtime("query_deadline_overflow"))?;
-        let id = self.query_ids.next()?;
-        let query = Arc::new(Query {
-            pending: Mutex::new(Pending::new(id, deadline)),
-            changed: Condvar::new(),
-        });
-        let _active = Active(query.clone()); // closes state on every early return, including transport failure
-        if STOP.load(Ordering::Relaxed) {
-            return Err(Error::Cancelled);
-        }
-        if timeout.is_zero() {
-            return Err(Error::QueryTimeout);
-        }
+    /// An owned reference to the initialized connection, checked against its class.
+    pub(super) fn connection(&self) -> Result<Strong, Error> {
         let api = self.manager.api;
         let classes = Classes::global(api)?;
         let connection = {
@@ -133,6 +187,67 @@ impl Session {
         if !unsafe { (api.associate)(connection.pointer.as_ptr(), classes.connection.as_ptr()) } {
             return Err(Error::Runtime("connection_descriptor_mismatch"));
         }
+        Ok(connection)
+    }
+
+    /// &mut self serializes requests. No detached workers or unbounded result queue.
+    pub(super) fn query_node(
+        &mut self,
+        window: i32,
+        node: i64,
+        timeout: Duration,
+    ) -> Result<Envelope, Error> {
+        let deadline = Instant::now()
+            .checked_add(timeout)
+            .ok_or(Error::Runtime("query_deadline_overflow"))?;
+        // No prefetch; single-node result callback, no cache in Carlo.
+        match self.find(Kind::Single, window, node, 0, deadline, timeout.is_zero())? {
+            Reply::Single(envelope) => Ok(*envelope),
+            Reply::Batch(_) => Err(Error::InvalidCallback),
+        }
+    }
+
+    /// API 36: the nodes of one answer, in wire order. An empty list is "no such
+    /// node"; the invalid-window sentinel is [`Error::WindowGone`].
+    pub(super) fn query_batch(
+        &mut self,
+        window: i32,
+        node: i64,
+        prefetch: i32,
+        deadline: Instant,
+    ) -> Result<Vec<crate::accessibility::node::Node>, Error> {
+        let expired = Instant::now() >= deadline;
+        match self.find(Kind::Batch, window, node, prefetch, deadline, expired)? {
+            Reply::Batch(batch) => Ok(batch.nodes),
+            Reply::Single(_) => Err(Error::InvalidCallback),
+        }
+    }
+
+    fn find(
+        &mut self,
+        kind: Kind,
+        window: i32,
+        node: i64,
+        prefetch: i32,
+        deadline: Instant,
+        expired: bool,
+    ) -> Result<Reply, Error> {
+        let id = self.query_ids.next()?;
+        let query = Arc::new(Query {
+            kind,
+            pending: Mutex::new(Awaiting::new(id, deadline)),
+            changed: Condvar::new(),
+        });
+        let _active = Active(query.clone()); // closes state on every early return, including transport failure
+        if STOP.load(Ordering::Relaxed) {
+            return Err(Error::Cancelled);
+        }
+        if expired {
+            return Err(Error::QueryTimeout);
+        }
+        let api = self.manager.api;
+        let classes = Classes::global(api)?;
+        let connection = self.connection()?;
         let data = Box::into_raw(Box::new(query.clone()));
         // SAFETY: callback class owns Box<Arc<Query>> on successful construction.
         let raw = unsafe { (api.new)(classes.result.as_ptr(), data.cast()) };
@@ -149,7 +264,7 @@ impl Session {
         request.long(node)?;
         request.int(id)?;
         request.binder(&callback)?;
-        request.int(0)?; // no prefetch; single-node result callback, no cache in Carlo
+        request.int(prefetch)?;
         unsafe extern "C" {
             fn gettid() -> i32;
         }

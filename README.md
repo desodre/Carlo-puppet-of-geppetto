@@ -8,8 +8,10 @@ Arquitetura escolhida: Binder + NDK, executando como usuário `shell` por meio d
 
 **Estado atual:** fundação nativa, lookup Binder e bootstrap de sessão de
 acessibilidade validados no emulador de referência API 34 x86_64. Registro, callback
-`init` e unregister funcionam sem Java. Hierarquia e captura ainda não estão
-implementadas; do protocolo existem o framing, um canal de controle com
+`init` e unregister funcionam sem Java. Existe um snapshot completo da hierarquia
+(`hierarchy-probe`, `hierarchy-dump`) para um único build fixado, executado nesse build
+(evidência em [docs/validation/p4-hierarchy-core.md](docs/validation/p4-hierarchy-core.md)); `serve` ainda não o
+oferece. Do protocolo existem o framing, um canal de controle com
 handshake e um canal de vídeo vinculado à mesma sessão (`serve`). O stream de
 vídeo só existe no único build fixado do espelhamento de display, onde foi
 executado por este caminho. Versão de desenvolvimento:
@@ -155,11 +157,12 @@ A sessão recusa aparelho físico por padrão, valida API/ABI/hash e executa em
 diretório exclusivo, removido ao terminar. `--allow-physical` exige autorização
 prévia para esse aparelho. Os comandos disponíveis são `doctor`, `version`,
 `binder-probe`, `accessibility-probe`, `accessibility-hold`, `node-query-probe`, `node-read-probe`,
+`hierarchy-probe`, `hierarchy-dump`, `hierarchy-tests`,
 `video-encode-probe`, `video-encode-dump`, `surface-parcel-probe`, `display-mirror-probe`,
 `display-mirror-dump`, `display-fault-probe` e `video-tests`; use
 `--report` para salvar evidência JSON e `--timeout` para prazo limitado.
-Comandos de saída binária (`video-encode-dump`, `display-mirror-dump`) exigem
-`--binary-output <arquivo>`. `serve` bloqueia à espera de cliente e por isso é
+Comandos de saída binária (`video-encode-dump`, `display-mirror-dump`) e o XML de
+`hierarchy-dump`, que contém conteúdo da tela, exigem `--binary-output <arquivo>`. `serve` bloqueia à espera de cliente e por isso é
 exercitado por `tools/smoke_serve.py`, não por esta sessão.
 Smoke test em emulador já iniciado:
 
@@ -276,8 +279,35 @@ o padrão desenhado. [Prova do encoder sintético](docs/validation/p2-1-syntheti
 Resultado nulo difere de `query_rejected` (janela/permissão/estado remoto não
 distinguíveis). A janela pode ficar disponível após init; a prova informa rejeição
 sem retry automático. Callback tem deadline de 5 s; host cobre Binder preso.
-Hierarquia completa/XML continuam pendentes. [Plano #23/#78](docs/plans/p1-node-decoder.md)
+[Plano #23/#78](docs/plans/p1-node-decoder.md)
 e [validação](docs/validation/p1-node-decoder.md).
+
+`hierarchy-probe` e `hierarchy-dump` fazem um snapshot completo da hierarquia:
+registram uma sessão (flags exatamente 1, sem suprimir os serviços de
+acessibilidade do usuário), enumeram as janelas de todos os displays, percorrem
+cada árvore com prefetch de descendentes e fazem unregister. O probe emite só
+JSON com contadores, limites e o erro tipado, sem texto, IDs, pacotes, classes,
+títulos ou bounds; o dump emite o XML compatível com uiautomator, que **é**
+conteúdo da tela, ou nada (exit 69) se o snapshot não for completo. Não há
+cache nem atomicidade: árvore que muda durante a leitura gera até duas novas
+tentativas e depois `inconsistent_snapshot`; limites (10 s, 10.000 nós,
+profundidade 128, XML de 4 MiB) geram `truncated`; nós com spans ou campos sem
+layout fixado geram `unsupported_node`. Rotação é informada como `unknown`.
+
+```sh
+python3 tools/android_session.py --serial <serial> --allow-physical \
+  --command hierarchy-probe --timeout 30 --report results/hierarchy-probe.json
+python3 tools/android_session.py --serial <serial> --allow-physical \
+  --command hierarchy-dump --timeout 30 --binary-output results/hierarchy.xml
+```
+
+Só o perfil `samsung_a16x_api36` (fingerprint, API 36, arm64 e UID 2000 exatos)
+executa; o emulador de referência API 34 e qualquer outro aparelho recebem
+`unsupported_profile` sem nenhuma chamada Binder. O contrato foi lido do
+`framework.jar`/`services.jar` desse build e **nada disto foi executado em
+dispositivo até agora**: a primeira execução pode refutar partes do contrato, e
+o probe nomeia o campo que falhar. [Contrato XML, limites e erros](docs/hierarchy.md),
+[contrato do perfil](docs/compat/samsung-a16x-api36-accessibility.json).
 
 Códigos do agente: 0 sucesso, 64 argumentos inválidos, 69 indisponível (inclui
 diretório de sessão ou socket recusado), 74 I/O/JSON ou sessão `serve` encerrada

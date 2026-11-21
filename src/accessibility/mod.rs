@@ -1,4 +1,5 @@
-//! Reference-profile session and minimum-node proofs. Diagnostics never log UI payloads.
+//! Reference-profile session and minimum-node proofs, and the hierarchy snapshot
+//! of the second pinned profile. Diagnostics never log UI payloads.
 
 #![cfg_attr(
     not(target_os = "android"),
@@ -12,11 +13,14 @@ use crate::{diagnostics::Diagnostics, error::CarloError};
 use serde::Serialize;
 
 mod contract;
+pub(crate) mod hierarchy;
 #[cfg(target_os = "android")]
 mod native;
 mod node;
 mod query;
 mod state;
+mod window;
+mod xml;
 
 /// Failures retain status codes and fixed operation names, never remote message text.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -43,6 +47,40 @@ pub(crate) enum Error {
     UnsupportedNodeLayout(&'static str),
     Cancelled,
     Runtime(&'static str),
+    /// `getWindows` answered null: the session lacks the capability or the flag.
+    WindowsUnavailable,
+    /// The app answered the invalid-window sentinel for this request.
+    WindowGone,
+    /// The window list reply did not match the pinned layout at `field`.
+    InvalidWindowList {
+        field: &'static str,
+        reason: &'static str,
+    },
+    /// API 36 node layout: `field` was malformed.
+    InvalidNodeField {
+        field: &'static str,
+        reason: &'static str,
+    },
+    /// API 36 node layout: `field` uses an encoding that is not pinned.
+    UnsupportedNodeField {
+        field: &'static str,
+        reason: &'static str,
+    },
+    /// `count` nodes of the snapshot could not be decoded; `class` is the first reason.
+    UnsupportedNode {
+        class: &'static str,
+        count: u32,
+    },
+    InvalidTree(&'static str),
+    /// The tree kept changing during every bounded attempt.
+    InconsistentSnapshot {
+        reason: &'static str,
+        attempts: u32,
+    },
+    /// A limit was reached; no partial XML exists.
+    Truncated {
+        limit: &'static str,
+    },
 }
 
 #[derive(Debug, Default, Serialize)]

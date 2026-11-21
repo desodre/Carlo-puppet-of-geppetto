@@ -12,6 +12,8 @@ Commands:
   accessibility-probe [--hold-ms N]  Register/wait/unregister (0..10000 ms hold)
   node-query-probe  Decode active root; report metadata only (JSON)
   node-read-probe   Emit decoded root as command data (includes UI text)
+  hierarchy-probe   Snapshot every window; report counters only (pinned build only; JSON)
+  hierarchy-dump    Emit that snapshot as XML command data (includes UI contents)
   binder-probe     API 34 shell Binder/ServiceManager proof (JSON)
   video-encode-probe  Encode synthetic GLES frames to H.264; report metadata (JSON)
   video-encode-dump   Emit that synthetic H.264 Annex B stream as command data
@@ -25,6 +27,10 @@ Commands:
 
 Doctor checks the native foundation, not Binder or video compatibility.
 Video encode probes use generated frames only; they never capture a display.
+Hierarchy commands register a UI automation session on the single pinned
+hierarchy build and are refused elsewhere without any Binder call. The dump
+prints a complete document or nothing: an inconsistent, truncated or
+undecodable snapshot is an error, never partial XML (docs/hierarchy.md).
 Display mirror commands send private display-service transactions and are
 refused outside the single pinned build; the dump contains screen contents.
 The fault probe provokes permission_denied, display_absent and unsupported_format
@@ -65,6 +71,12 @@ pub enum Command {
     NodeQueryProbe,
     /// Emit decoded root data on stdout, never in diagnostics.
     NodeReadProbe,
+    /// Snapshot the whole hierarchy on the pinned build; emit counters, or the
+    /// XML document (UI contents) on stdout.
+    HierarchyProbe {
+        /// Write the XML document instead of the JSON report.
+        dump: bool,
+    },
     /// Encode synthetic frames; emit stream metadata, or the raw stream on stdout.
     VideoEncodeProbe {
         /// Write Annex B bytes instead of the JSON report.
@@ -145,6 +157,8 @@ pub fn parse(arguments: impl IntoIterator<Item = String>) -> Result<Command, Car
         (Some("doctor"), Some("--json")) => Ok(Command::Doctor { json: true }),
         (Some("node-read-probe"), None) => Ok(Command::NodeReadProbe),
         (Some("node-query-probe"), None) => Ok(Command::NodeQueryProbe),
+        (Some("hierarchy-probe"), None) => Ok(Command::HierarchyProbe { dump: false }),
+        (Some("hierarchy-dump"), None) => Ok(Command::HierarchyProbe { dump: true }),
         (Some("binder-probe"), None) => Ok(Command::BinderProbe),
         (Some("video-encode-probe"), None) => Ok(Command::VideoEncodeProbe { dump: false }),
         (Some("video-encode-dump"), None) => Ok(Command::VideoEncodeProbe { dump: true }),
@@ -176,6 +190,9 @@ mod tests {
             vec!["serve", "--session-dir", "/tmp/a", "extra"],
             vec!["serve", "/tmp/a"],
             vec!["binder-probe", "--json"],
+            vec!["hierarchy-probe", "--json"],
+            vec!["hierarchy-dump", "--output"],
+            vec!["hierarchy-dump", "0"],
             vec!["video-encode-dump", "--output"],
             vec!["surface-parcel-probe", "--json"],
             vec!["display-mirror-probe", "--json"],
@@ -204,6 +221,15 @@ mod tests {
             Command::SurfaceParcelProbe
         );
         assert!(HELP.contains("surface-parcel-probe"));
+        assert_eq!(
+            parse(args(&["hierarchy-probe"])).unwrap(),
+            Command::HierarchyProbe { dump: false }
+        );
+        assert_eq!(
+            parse(args(&["hierarchy-dump"])).unwrap(),
+            Command::HierarchyProbe { dump: true }
+        );
+        assert!(HELP.contains("hierarchy-probe") && HELP.contains("hierarchy-dump"));
         assert_eq!(
             parse(args(&["display-mirror-probe"])).unwrap(),
             Command::DisplayMirrorProbe { dump: false }

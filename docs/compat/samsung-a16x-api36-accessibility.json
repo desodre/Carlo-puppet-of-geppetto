@@ -1,0 +1,773 @@
+{
+  "schema_version": 1,
+  "executed_on_device": true,
+  "evidence": "docs/validation/p4-hierarchy-core.md",
+  "profile": {
+    "android_api": 36,
+    "abi": "arm64-v8a",
+    "architecture": "aarch64",
+    "uid": 2000,
+    "user_id": 0,
+    "fingerprint": "samsung/a16xub/a16x:16/BP4A.251205.006/A166MUBSADZJA:user/release-keys",
+    "selection": "exact fingerprint, API, architecture and shell UID; any other device is unsupported and receives no Binder call"
+  },
+  "sources": [
+    {
+      "file": "framework.jar",
+      "sha256": "65a982a9f223f49aea1a8ddaaa6dd90e97a73db2d5b84797b58f194949c18502",
+      "origin": "device /system/framework"
+    },
+    {
+      "file": "services.jar",
+      "sha256": "9c07fc89884e661fdf9438d40fcfe9625cb196e5920a184a46c04718d8522606",
+      "origin": "device /system/framework"
+    }
+  ],
+  "manager": {
+    "descriptor": "android.view.accessibility.IAccessibilityManager",
+    "register": {
+      "transaction": 10,
+      "flags": 0,
+      "arguments": [
+        "IBinder owner",
+        "IAccessibilityServiceClient client",
+        "typed-object presence=1 + AccessibilityServiceInfo",
+        "i32 userId=0",
+        "i32 flags=1 (FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)"
+      ],
+      "registration_flags_must_equal": 1,
+      "registration_flags_reason": "0 would unbind the user's accessibility services for the session; asserted at compile time, guarded at run time and tested",
+      "reply": "Java exception/status header",
+      "already_registered": "IllegalStateException (-5) is reported as conflict; a foreign session is never unregistered"
+    },
+    "unregister": {
+      "transaction": 11,
+      "flags": 0,
+      "arguments": [
+        "same IAccessibilityServiceClient Binder"
+      ],
+      "reply": "Java exception/status header"
+    }
+  },
+  "client": {
+    "descriptor": "android.accessibilityservice.IAccessibilityServiceClient",
+    "source_oneway": true,
+    "expected_sender_uid": 1000,
+    "callbacks": [
+      {
+        "transaction": 1,
+        "name": "init",
+        "arguments": [
+          "nullable strong Binder connection",
+          "i32 connectionId",
+          "nullable strong Binder windowToken"
+        ],
+        "note": "called again with a null connection while the system resets the session; accepted and counted as a revocation, never an error"
+      },
+      {
+        "transaction": 3,
+        "name": "onInterrupt",
+        "arguments": [],
+        "handling": "counted as an invalidation"
+      },
+      {
+        "transaction": 5,
+        "name": "clearAccessibilityCache",
+        "arguments": [],
+        "handling": "counted as an invalidation"
+      },
+      {
+        "transaction": 16,
+        "name": "onSystemActionsChanged",
+        "arguments": [],
+        "handling": "tolerated"
+      }
+    ],
+    "unused_callbacks": "UNKNOWN_TRANSACTION and counted as ignored; during closing callbacks are discarded",
+    "max_parcel_bytes": 65536,
+    "init_timeout_ms": 5000
+  },
+  "service_info": {
+    "layout": "the 22 API 34 fields in the same order plus one trailing i32",
+    "bytes_without_presence_flag": 96,
+    "fields": [
+      {
+        "name": "eventTypes",
+        "wire": "i32",
+        "value": 0
+      },
+      {
+        "name": "packageNames",
+        "wire": "string_array_length",
+        "value": -1
+      },
+      {
+        "name": "feedbackType",
+        "wire": "i32",
+        "value": 16
+      },
+      {
+        "name": "notificationTimeout",
+        "wire": "i64",
+        "value": 0
+      },
+      {
+        "name": "nonInteractiveUiTimeout",
+        "wire": "i32",
+        "value": 0
+      },
+      {
+        "name": "interactiveUiTimeout",
+        "wire": "i32",
+        "value": 0
+      },
+      {
+        "name": "flags",
+        "wire": "i32",
+        "value": 82
+      },
+      {
+        "name": "crashed",
+        "wire": "i32",
+        "value": 0
+      },
+      {
+        "name": "componentName",
+        "wire": "null_java_parcelable_class_name",
+        "value": null
+      },
+      {
+        "name": "resolveInfo",
+        "wire": "null_java_parcelable_class_name",
+        "value": null
+      },
+      {
+        "name": "settingsActivityName",
+        "wire": "null_string16",
+        "value": null
+      },
+      {
+        "name": "capabilities",
+        "wire": "i32",
+        "value": 1
+      },
+      {
+        "name": "summaryResId",
+        "wire": "i32",
+        "value": 0
+      },
+      {
+        "name": "nonLocalizedSummary",
+        "wire": "null_string16",
+        "value": null
+      },
+      {
+        "name": "descriptionResId",
+        "wire": "i32",
+        "value": 0
+      },
+      {
+        "name": "animatedImageRes",
+        "wire": "i32",
+        "value": 0
+      },
+      {
+        "name": "htmlDescriptionRes",
+        "wire": "i32",
+        "value": 0
+      },
+      {
+        "name": "nonLocalizedDescription",
+        "wire": "null_string16",
+        "value": null
+      },
+      {
+        "name": "isAccessibilityTool",
+        "wire": "boolean_as_i32",
+        "value": 1
+      },
+      {
+        "name": "tileServiceName",
+        "wire": "null_string16",
+        "value": null
+      },
+      {
+        "name": "introResId",
+        "wire": "i32",
+        "value": 0
+      },
+      {
+        "name": "motionEventSources",
+        "wire": "i32",
+        "value": 0
+      },
+      {
+        "name": "observedMotionEventSources",
+        "wire": "i32",
+        "value": 0
+      }
+    ],
+    "flags_bits": {
+      "INCLUDE_NOT_IMPORTANT_VIEWS": 2,
+      "REPORT_VIEW_IDS": 16,
+      "RETRIEVE_INTERACTIVE_WINDOWS": 64
+    }
+  },
+  "connection": {
+    "descriptor": "android.accessibilityservice.IAccessibilityServiceConnection",
+    "find_node": {
+      "name": "findAccessibilityNodeInfoByAccessibilityId",
+      "transaction": 3,
+      "arguments": [
+        "i32 windowId (AccessibilityWindowInfo id)",
+        "i64 nodeId (root = -2147483650)",
+        "i32 interactionId > 0, never reused",
+        "strong Binder per-request callback",
+        "i32 prefetch flags",
+        "i64 native gettid()",
+        "i32 typed Bundle presence=0"
+      ],
+      "reply": "Java status then nullable String[]; null means the request was rejected",
+      "prefetch_flags": {
+        "ANCESTORS": 1,
+        "SIBLINGS": 2,
+        "DESCENDANTS_HYBRID": 4,
+        "DESCENDANTS_DEPTH_FIRST": 8,
+        "DESCENDANTS_BREADTH_FIRST": 16,
+        "UNINTERRUPTIBLE": 32
+      },
+      "prefetch_sent": [
+        40,
+        0
+      ],
+      "prefetch_sent_meaning": "40 = descendants depth first, uninterruptible; 0 = the node alone, only after an answer failed to decode",
+      "max_prefetched_nodes": 50
+    },
+    "get_windows": {
+      "name": "getWindows",
+      "transaction": 10,
+      "arguments": [],
+      "reply": [
+        "Java exception/status header",
+        "i32 presence (0 = null: the session lacks capability 1 or flag 64)",
+        "WindowListSparseArray: i32 displayCount",
+        "per display: i32 N, N x (String16 class name android.view.accessibility.AccessibilityWindowInfo + body), then i32 displayId"
+      ],
+      "may_block_ms": 5000,
+      "max_reply_bytes": 65536,
+      "max_displays": 16,
+      "max_windows_per_display": 64
+    }
+  },
+  "window_info": {
+    "class": "android.view.accessibility.AccessibilityWindowInfo",
+    "fields": [
+      {
+        "name": "displayId",
+        "wire": "i32"
+      },
+      {
+        "name": "type",
+        "wire": "i32, 1..7"
+      },
+      {
+        "name": "layer",
+        "wire": "i32"
+      },
+      {
+        "name": "booleanProperties",
+        "wire": "i32",
+        "bits": {
+          "ACTIVE": 1,
+          "FOCUSED": 2,
+          "ACCESSIBILITY_FOCUSED": 4,
+          "PICTURE_IN_PICTURE": 8
+        }
+      },
+      {
+        "name": "id",
+        "wire": "i32"
+      },
+      {
+        "name": "parentId",
+        "wire": "i32"
+      },
+      {
+        "name": "taskId",
+        "wire": "i32"
+      },
+      {
+        "name": "regionInScreen",
+        "wire": "native Region: i32 count, then count i32 forming left,top,right,bottom rectangles",
+        "inferred_from_aosp": true,
+        "checks": "count is a multiple of 4 and at most 1024; rectangles not inverted"
+      },
+      {
+        "name": "title",
+        "wire": "CharSequence",
+        "handling": "validated and discarded; a non-empty span list is a typed error"
+      },
+      {
+        "name": "anchorId",
+        "wire": "i64"
+      },
+      {
+        "name": "transitionTime",
+        "wire": "i64"
+      },
+      {
+        "name": "childIds",
+        "wire": "i32 n + n*i32"
+      },
+      {
+        "name": "connectionId",
+        "wire": "i32"
+      },
+      {
+        "name": "locales",
+        "wire": "writeParcelable: String16 class name android.os.LocaleList + String8 language tags, or a null String16",
+        "inferred_from_aosp": true
+      },
+      {
+        "name": "mRawType",
+        "wire": "i32",
+        "samsung_only": true
+      }
+    ],
+    "failure_policy": "the first field that does not match fails the whole list with invalid_window_list naming the field and the reason; nothing is skipped or resynchronised"
+  },
+  "callback": {
+    "descriptor": "android.view.accessibility.IAccessibilityInteractionConnectionCallback",
+    "source_oneway": true,
+    "authority": "Unpublished per-request Binder capability forwarded to the target app; the caller UID is arbitrary.",
+    "transactions": [
+      {
+        "transaction": 1,
+        "name": "setFindAccessibilityNodeInfoResult",
+        "arguments": [
+          "i32 presence + AccessibilityNodeInfo",
+          "i32 interactionId"
+        ]
+      },
+      {
+        "transaction": 2,
+        "name": "setFindAccessibilityNodeInfosResult",
+        "arguments": [
+          "typed list: i32 N or -1, each item i32 presence + AccessibilityNodeInfo",
+          "i32 interactionId"
+        ]
+      },
+      {
+        "transaction": 3,
+        "name": "setPrefetchAccessibilityNodeInfoResult",
+        "arguments": [
+          "same list layout",
+          "i32 interactionId"
+        ],
+        "handling": "never requested (every batch request is uninterruptible); accepted and dropped unread"
+      }
+    ],
+    "invalid_window_sentinel": {
+      "transaction": 1,
+      "node": null,
+      "interaction_id": 2147483647,
+      "handling": "window_gone for the pending request"
+    },
+    "max_parcel_bytes": 524288,
+    "max_parcel_bytes_reason": "oneway transactions may use at most half of the ~1 MiB per-process Binder buffer, so no deliverable callback is larger; the API 34 profile keeps 65536",
+    "max_list_items": 64,
+    "payload_copied_or_logged": "Bounded in-memory copy; never logged or persisted. Decoded fields only in hierarchy-dump command data."
+  },
+  "node_info": {
+    "non_default_fields": "u64 bitmap, fields in bit order, valid bits 0..49, any higher bit rejected",
+    "boolean_property_bits": {
+      "checkable": 1,
+      "checked": 2,
+      "focusable": 4,
+      "focused": 8,
+      "selected": 16,
+      "clickable": 32,
+      "longClickable": 64,
+      "enabled": 128,
+      "password": 256,
+      "scrollable": 512,
+      "visibleToUser": 2048
+    },
+    "char_sequence": "i32 1 + String8 for plain text; i32 0 + String8 + span list for spanned text. A non-empty span list is rejected (span bodies are not pinned).",
+    "limits": {
+      "string_units": 100000,
+      "children": 10000,
+      "actions": 128,
+      "extra_data_keys": 128
+    },
+    "fields": [
+      {
+        "bit": 0,
+        "name": "sealed",
+        "wire": "boolean_as_i32",
+        "api34_bit": 0,
+        "handling": "consumed"
+      },
+      {
+        "bit": 1,
+        "name": "sourceNodeId",
+        "wire": "i64",
+        "api34_bit": 1,
+        "handling": "decoded"
+      },
+      {
+        "bit": 2,
+        "name": "windowId",
+        "wire": "i32",
+        "api34_bit": 2,
+        "handling": "decoded"
+      },
+      {
+        "bit": 3,
+        "name": "parentNodeId",
+        "wire": "i64",
+        "api34_bit": 3,
+        "handling": "decoded"
+      },
+      {
+        "bit": 4,
+        "name": "labelForId",
+        "wire": "i64",
+        "api34_bit": 4,
+        "handling": "consumed"
+      },
+      {
+        "bit": 5,
+        "name": "labeledById",
+        "wire": "i64",
+        "api34_bit": 5,
+        "handling": "consumed"
+      },
+      {
+        "bit": 6,
+        "name": "labeledByIds",
+        "wire": "i32 n + n*i64",
+        "api34_bit": null,
+        "handling": "consumed"
+      },
+      {
+        "bit": 7,
+        "name": "traversalBefore",
+        "wire": "i64",
+        "api34_bit": 6,
+        "handling": "consumed"
+      },
+      {
+        "bit": 8,
+        "name": "traversalAfter",
+        "wire": "i64",
+        "api34_bit": 7,
+        "handling": "consumed"
+      },
+      {
+        "bit": 9,
+        "name": "minDurationBetweenContentChanges",
+        "wire": "i64",
+        "api34_bit": 8,
+        "handling": "consumed"
+      },
+      {
+        "bit": 10,
+        "name": "connectionId",
+        "wire": "i32",
+        "api34_bit": 9,
+        "handling": "decoded"
+      },
+      {
+        "bit": 11,
+        "name": "childNodeIds",
+        "wire": "i32 n + n*i64",
+        "api34_bit": 10,
+        "handling": "decoded"
+      },
+      {
+        "bit": 12,
+        "name": "boundsInParent",
+        "wire": "i32 top,bottom,left,right",
+        "api34_bit": 11,
+        "handling": "decoded"
+      },
+      {
+        "bit": 13,
+        "name": "boundsInScreen",
+        "wire": "i32 top,bottom,left,right",
+        "api34_bit": 12,
+        "handling": "decoded (XML bounds)"
+      },
+      {
+        "bit": 14,
+        "name": "boundsInWindow",
+        "wire": "i32 top,bottom,left,right",
+        "api34_bit": 13,
+        "handling": "decoded"
+      },
+      {
+        "bit": 15,
+        "name": "actions",
+        "wire": "i64 standard mask, i32 n, n*(i32 id + CharSequence)",
+        "api34_bit": 14,
+        "handling": "consumed"
+      },
+      {
+        "bit": 16,
+        "name": "maxTextLength",
+        "wire": "i32",
+        "api34_bit": 15,
+        "handling": "consumed"
+      },
+      {
+        "bit": 17,
+        "name": "movementGranularities",
+        "wire": "i32",
+        "api34_bit": 16,
+        "handling": "consumed"
+      },
+      {
+        "bit": 18,
+        "name": "booleanProperties",
+        "wire": "i32",
+        "api34_bit": 17,
+        "handling": "decoded (boolean attributes)"
+      },
+      {
+        "bit": 19,
+        "name": "packageName",
+        "wire": "CharSequence",
+        "api34_bit": 18,
+        "handling": "decoded (XML package)"
+      },
+      {
+        "bit": 20,
+        "name": "className",
+        "wire": "CharSequence",
+        "api34_bit": 19,
+        "handling": "decoded (XML class)"
+      },
+      {
+        "bit": 21,
+        "name": "text",
+        "wire": "CharSequence",
+        "api34_bit": 20,
+        "handling": "decoded (XML text)"
+      },
+      {
+        "bit": 22,
+        "name": "hintText",
+        "wire": "CharSequence",
+        "api34_bit": 21,
+        "handling": "consumed"
+      },
+      {
+        "bit": 23,
+        "name": "error",
+        "wire": "CharSequence",
+        "api34_bit": 22,
+        "handling": "consumed"
+      },
+      {
+        "bit": 24,
+        "name": "stateDescription",
+        "wire": "CharSequence",
+        "api34_bit": 23,
+        "handling": "consumed"
+      },
+      {
+        "bit": 25,
+        "name": "contentDescription",
+        "wire": "CharSequence",
+        "api34_bit": 24,
+        "handling": "decoded (XML content-desc)"
+      },
+      {
+        "bit": 26,
+        "name": "supplementalDescription",
+        "wire": "CharSequence",
+        "api34_bit": null,
+        "handling": "consumed"
+      },
+      {
+        "bit": 27,
+        "name": "paneTitle",
+        "wire": "CharSequence",
+        "api34_bit": 25,
+        "handling": "consumed"
+      },
+      {
+        "bit": 28,
+        "name": "tooltipText",
+        "wire": "CharSequence",
+        "api34_bit": 26,
+        "handling": "consumed"
+      },
+      {
+        "bit": 29,
+        "name": "containerTitle",
+        "wire": "CharSequence",
+        "api34_bit": 27,
+        "handling": "consumed"
+      },
+      {
+        "bit": 30,
+        "name": "viewIdResourceName",
+        "wire": "String16",
+        "api34_bit": 28,
+        "handling": "decoded (XML resource-id)"
+      },
+      {
+        "bit": 31,
+        "name": "uniqueId",
+        "wire": "String16",
+        "api34_bit": 29,
+        "handling": "decoded"
+      },
+      {
+        "bit": 32,
+        "name": "textSelectionStart",
+        "wire": "i32",
+        "api34_bit": 30,
+        "handling": "consumed"
+      },
+      {
+        "bit": 33,
+        "name": "textSelectionEnd",
+        "wire": "i32",
+        "api34_bit": 31,
+        "handling": "consumed"
+      },
+      {
+        "bit": 34,
+        "name": "inputType",
+        "wire": "i32",
+        "api34_bit": 32,
+        "handling": "consumed"
+      },
+      {
+        "bit": 35,
+        "name": "liveRegion",
+        "wire": "i32",
+        "api34_bit": 33,
+        "handling": "consumed"
+      },
+      {
+        "bit": 36,
+        "name": "drawingOrder",
+        "wire": "i32",
+        "api34_bit": 34,
+        "handling": "consumed"
+      },
+      {
+        "bit": 37,
+        "name": "extraDataKeys",
+        "wire": "string list: i32 n (-1 null) + n*String16",
+        "api34_bit": 35,
+        "handling": "consumed"
+      },
+      {
+        "bit": 38,
+        "name": "extras",
+        "wire": "Bundle: i32 length; when length > 0: i32 magic, length bytes, then one i32 boolean mHasIntent (Android 16 BaseBundle.writeToParcelInner, read from the pinned framework.jar and confirmed on the device)",
+        "api34_bit": 36,
+        "handling": "length and magic checked, contents opaque"
+      },
+      {
+        "bit": 39,
+        "name": "rangeInfo",
+        "wire": "i32 type 0..3 + 3*f32",
+        "api34_bit": 37,
+        "handling": "consumed"
+      },
+      {
+        "bit": 40,
+        "name": "collectionInfo",
+        "wire": "i32 rowCount, i32 columnCount, boolean hierarchical, i32 selectionMode, i32 itemCount, i32 importantForAccessibilityItemCount",
+        "api34_bit": 38,
+        "handling": "consumed"
+      },
+      {
+        "bit": 41,
+        "name": "collectionItemInfo",
+        "wire": "String16 rowTitle, i32 rowIndex, i32 rowSpan, String16 columnTitle, i32 columnIndex, i32 columnSpan, boolean heading, boolean selected, i32 sortDirection",
+        "api34_bit": 39,
+        "handling": "consumed"
+      },
+      {
+        "bit": 42,
+        "name": "touchDelegateInfo",
+        "wire": "i32 n, n*(Region + i64)",
+        "api34_bit": 40,
+        "handling": "rejected: unsupported_node_field"
+      },
+      {
+        "bit": 43,
+        "name": "extraRenderingInfo",
+        "wire": "not pinned",
+        "api34_bit": 41,
+        "handling": "rejected: unsupported_node_field"
+      },
+      {
+        "bit": 44,
+        "name": "leashedChild",
+        "wire": "strong Binder",
+        "api34_bit": 42,
+        "handling": "rejected: unsupported_node_field"
+      },
+      {
+        "bit": 45,
+        "name": "leashedParent",
+        "wire": "strong Binder",
+        "api34_bit": 43,
+        "handling": "rejected: unsupported_node_field"
+      },
+      {
+        "bit": 46,
+        "name": "leashedParentNodeId",
+        "wire": "i64",
+        "api34_bit": 44,
+        "handling": "consumed"
+      },
+      {
+        "bit": 47,
+        "name": "selection",
+        "wire": "2*(i32 offset + i64 nodeId)",
+        "api34_bit": null,
+        "handling": "consumed"
+      },
+      {
+        "bit": 48,
+        "name": "checked",
+        "wire": "i32 0 false, 1 true, 2 partial",
+        "api34_bit": null,
+        "handling": "decoded: value 1 also sets checked"
+      },
+      {
+        "bit": 49,
+        "name": "expandedState",
+        "wire": "i32 0..3",
+        "api34_bit": null,
+        "handling": "consumed"
+      }
+    ]
+  },
+  "snapshot_limits": {
+    "total_deadline_ms": 10000,
+    "request_deadline_ms": 2000,
+    "attempts": 3,
+    "retry_pause_ms": 100,
+    "max_nodes": 10000,
+    "max_depth": 128,
+    "max_xml_bytes": 4194304
+  },
+  "least_certain": [
+    "native Region layout (inferred)",
+    "locales encoding (inferred)",
+    "Samsung trailing mRawType",
+    "the requested node being first in a code-2 list for a root request",
+    "node windowId being equal to the AccessibilityWindowInfo id"
+  ],
+  "xml_contract": "docs/hierarchy.md"
+}

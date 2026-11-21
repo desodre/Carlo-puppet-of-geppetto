@@ -918,8 +918,9 @@ mod ffi {
     /// `dequeueBuffer` while the display service concurrently queries the surface
     /// or delivers callbacks. With no free worker those callers, the compositor
     /// included, would stall. Four leaves headroom and stays a small fixed bound;
-    /// workers are only spawned on demand.
-    const POOL_THREADS: u32 = 4;
+    /// workers are only spawned on demand. The value lives in `pool::THREADS` so
+    /// that an automation session starting the pool first asks for the same size.
+    const POOL_THREADS: u32 = pool::THREADS;
 
     struct Api {
         _libraries: [Library; 2],
