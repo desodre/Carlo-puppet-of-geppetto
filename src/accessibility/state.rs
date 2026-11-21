@@ -16,6 +16,11 @@ pub(super) struct Slot<T> {
     pub(super) connection: Option<(i32, T)>,
     pub(super) error: Option<Error>,
     pub(super) counters: Counters,
+    /// `onInterrupt`/`clearAccessibilityCache` deliveries; never serialized by the
+    /// session reports, read by a hierarchy snapshot.
+    pub(super) invalidations: u32,
+    /// `init` deliveries with a null connection (the system revoking the session).
+    pub(super) revocations: u32,
 }
 
 impl<T> Default for Slot<T> {
@@ -25,6 +30,8 @@ impl<T> Default for Slot<T> {
             connection: None,
             error: None,
             counters: Counters::default(),
+            invalidations: 0,
+            revocations: 0,
         }
     }
 }
@@ -67,6 +74,22 @@ pub(super) fn decode_init<R: InitReader>(reader: &mut R) -> Result<(i32, R::Bind
         return Err(Error::InvalidCallback);
     }
     Ok((id, connection))
+}
+
+/// API 36 `init`: the system calls it again with a null connection while it
+/// resets the session. `None` is that revocation, accepted without an error.
+pub(super) fn decode_init_nullable<R: InitReader>(
+    reader: &mut R,
+) -> Result<Option<(i32, R::Binder)>, Error> {
+    let connection = reader.binder()?;
+    let id = reader.int()?;
+    let _window_token = reader.binder()?;
+    reader.finish()?;
+    match connection {
+        None => Ok(None),
+        Some(_) if id < 0 => Err(Error::InvalidCallback),
+        Some(connection) => Ok(Some((id, connection))),
+    }
 }
 
 #[cfg(test)]
@@ -120,6 +143,33 @@ mod tests {
                 Ok(())
             }
         }
+    }
+    #[test]
+    fn nullable_init_accepts_a_revocation_and_still_rejects_malformed_parcels() {
+        let drops = Rc::new(Cell::new(0));
+        let reader = |connection: bool, id: i32, extra: bool| Reader {
+            binders: vec![connection.then(|| Ref(drops.clone())), None],
+            id: Ok(id),
+            extra,
+        };
+        assert!(matches!(
+            decode_init_nullable(&mut reader(true, 4, false)),
+            Ok(Some((4, _)))
+        ));
+        for id in [-1, 0, 9] {
+            assert!(matches!(
+                decode_init_nullable(&mut reader(false, id, false)),
+                Ok(None)
+            ));
+        }
+        assert!(decode_init_nullable(&mut reader(true, -1, false)).is_err());
+        assert!(decode_init_nullable(&mut reader(false, 0, true)).is_err());
+        assert!(decode_init_nullable(&mut reader(true, 1, true)).is_err());
+        let mut short = reader(true, 1, false);
+        short.binders.pop();
+        assert!(decode_init_nullable(&mut short).is_err());
+        drop(short);
+        assert_eq!(drops.get(), 4);
     }
     #[test]
     fn malformed_init_releases_all_read_references_and_never_becomes_ready() {

@@ -1,0 +1,218 @@
+{
+  "date": "2026-11-21",
+  "idle_screen_probe_runs": [
+    {
+      "windows": 3,
+      "nodes": 190,
+      "max_depth": 13,
+      "requests": 13,
+      "batches": 13,
+      "single_fallbacks": 0,
+      "window_polls": 1,
+      "elapsed_ms": 169,
+      "xml_bytes": 72211,
+      "duplicates": 0,
+      "attempts": 1
+    },
+    {
+      "windows": 3,
+      "nodes": 190,
+      "max_depth": 13,
+      "requests": 13,
+      "batches": 13,
+      "single_fallbacks": 0,
+      "window_polls": 1,
+      "elapsed_ms": 172,
+      "xml_bytes": 72211,
+      "duplicates": 0,
+      "attempts": 1
+    },
+    {
+      "windows": 3,
+      "nodes": 190,
+      "max_depth": 13,
+      "requests": 13,
+      "batches": 13,
+      "single_fallbacks": 0,
+      "window_polls": 1,
+      "elapsed_ms": 168,
+      "xml_bytes": 72210,
+      "duplicates": 0,
+      "attempts": 1
+    },
+    {
+      "windows": 3,
+      "nodes": 190,
+      "max_depth": 13,
+      "requests": 13,
+      "batches": 13,
+      "single_fallbacks": 0,
+      "window_polls": 1,
+      "elapsed_ms": 188,
+      "xml_bytes": 72211,
+      "duplicates": 0,
+      "attempts": 1
+    },
+    {
+      "windows": 3,
+      "nodes": 190,
+      "max_depth": 13,
+      "requests": 13,
+      "batches": 13,
+      "single_fallbacks": 0,
+      "window_polls": 1,
+      "elapsed_ms": 162,
+      "xml_bytes": 72211,
+      "duplicates": 0,
+      "attempts": 1
+    }
+  ],
+  "fixture_smoke": {
+    "emulator": false,
+    "android_api": 36,
+    "abi": "arm64-v8a",
+    "fixture_sha256": "8fcb5cf390f609bd3ac675b86de13a8c41927b01c1299a126a4ca33a3f529b3e",
+    "ui_contents_recorded": false,
+    "accessibility_enabled_before": false,
+    "accessibility_services_present_before": false,
+    "accessibility_enabled_restored": true,
+    "accessibility_restoration_checks": 4,
+    "probe": {
+      "schema_version": 1,
+      "environment": {
+        "schema_version": 1,
+        "android_api": 36,
+        "effective_uid": 2000,
+        "foundation_ready": true,
+        "checks": [
+          {},
+          {},
+          {},
+          {},
+          {}
+        ],
+        "capabilities": [
+          {
+            "available": false
+          },
+          {
+            "available": true
+          },
+          {
+            "available": true
+          },
+          {
+            "available": true
+          }
+        ]
+      },
+      "registration_flags": 1,
+      "limits": {
+        "total_deadline_ms": 10000,
+        "request_deadline_ms": 2000,
+        "max_attempts": 3,
+        "max_nodes": 10000,
+        "max_depth": 128,
+        "max_xml_bytes": 4194304,
+        "max_displays": 16,
+        "max_windows_per_display": 64,
+        "max_callback_bytes": 524288
+      },
+      "session": {
+        "initialized": true,
+        "connection_id": 292,
+        "unregistered": true,
+        "interrupted": false,
+        "callbacks": {
+          "init": 1,
+          "late": 1,
+          "ignored": 0,
+          "invalid": 0
+        },
+        "revocations": 0
+      },
+      "snapshot": {
+        "snapshot_id": 1,
+        "start_ms": 9,
+        "end_ms": 79,
+        "elapsed_ms": 70,
+        "generation": 1,
+        "rotation": null,
+        "attempts": 1,
+        "requests": 3,
+        "batches": 3,
+        "single_fallbacks": 0,
+        "window_polls": 1,
+        "invalidations": 0,
+        "displays": [
+          {
+            "display_id": 0,
+            "windows": 3,
+            "empty_windows": 0
+          }
+        ],
+        "windows": 3,
+        "empty_windows": 0,
+        "nodes": 62,
+        "max_depth": 13,
+        "duplicates": 0,
+        "foreign_nodes": 0,
+        "node_failures": [],
+        "xml_bytes": 23046,
+        "sanitized_characters": 0
+      },
+      "error": null,
+      "cleanup_error": null,
+      "executed": true
+    },
+    "dump": {
+      "windows": 3,
+      "nodes": 62,
+      "attempts": 1,
+      "contract_valid": true,
+      "fixture_root_found": true
+    },
+    "reference": {
+      "attempts": 1,
+      "device_file_removed": true
+    },
+    "parity": {
+      "reference_nodes": 6,
+      "matched_nodes": 6,
+      "unmatched_reference_nodes": 0,
+      "carlo_window_nodes": 6,
+      "carlo_only_nodes": 0,
+      "attribute_mismatches": {},
+      "index_differences": 0,
+      "candidate_windows": 1,
+      "window_matched": true,
+      "parity": true,
+      "carlo_valid": true,
+      "validation_errors": [],
+      "validation_error_counts": {},
+      "carlo_windows": 3,
+      "carlo_nodes": 62,
+      "reference_extra_attributes": {
+        "drawing-order": 6,
+        "hint": 6
+      },
+      "reference_rotation_numeric": true,
+      "ui_contents_recorded": false
+    },
+    "update_after_touch": {
+      "text_counter_advanced_by_one": true,
+      "snapshot_id_changed": false,
+      "start_ms_changed": true,
+      "dump_attempts": 1
+    },
+    "fixture_removed": true,
+    "dumps_deleted": true,
+    "session_directories_removed": true
+  },
+  "native_hierarchy_test": {
+    "result": "test result: ok. 1 passed; 0 failed",
+    "resource_cycles": "(8, 6) [(8, 6), (8, 6), (8, 6), (8, 6), (8, 6), (8, 6), (8, 6), (8, 6)]"
+  },
+  "video_regression": "test result: ok. 4 passed; 0 failed",
+  "accessibility_enabled_after_every_run": 0
+}

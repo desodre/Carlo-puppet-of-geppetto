@@ -40,6 +40,14 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md), [PLANO.md](PLANO.md) and the relevant i
 - `src/binder/pool.rs` owns the single process Binder pool; the encoder's producer
   is a local Binder, so the pool must run before a surface is handed out. Start the
   encoder before deleting it: an unstarted codec with an input surface leaks a thread.
+- `src/accessibility/` holds two exact-build profiles; layouts are separate tables and
+  the API 34 path must not depend on API 36 logic. Register with flags exactly 1
+  (never suppress the user's accessibility services) and unregister on every exit.
+  Hierarchy snapshots keep no cache, never return partial XML as success and fail
+  typed on any limit. `hierarchy-probe` emits counters only; `hierarchy-dump` and any
+  XML are real screen contents: never store or log them. Smokes on a physical device
+  must refuse when an accessibility service is enabled and must check that
+  `accessibility_enabled` is restored. `docs/hierarchy.md` is the XML contract.
 - `tools/fixture/` is the controlled app under test, never an agent/Java bridge.
   Fixture smoke refuses physical devices/existing packages and uninstalls its APK;
   `smoke_display_mirror.py --allow-physical` needs the owner's go-ahead for that run.

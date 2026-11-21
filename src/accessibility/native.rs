@@ -1,12 +1,16 @@
-//! Private API 34 FFI. The process owns one immutable table/classes/pool. Keeping
+//! Private FFI for the pinned profiles (API 34 reference emulator; the API 36
+//! build adds the window list and batched node answers, see `hierarchy`). The
+//! process owns one immutable table/classes/pool. Keeping
 //! the dlopen handle in a static prevents callbacks into unloaded code. Per-session
 //! references/parcels/state still use RAII; no unbounded queues or worker creation.
 
+pub(super) mod hierarchy;
 mod query;
 
 use super::{
     Error, Outcome, contract,
-    state::{InitReader, Slot, decode_init},
+    contract::Profile,
+    state::{InitReader, Slot, decode_init, decode_init_nullable},
 };
 use crate::binder::native::Library;
 use std::{
@@ -258,9 +262,9 @@ impl OwnedParcel {
             (self.api.write_long)(self.pointer.as_ptr(), value)
         })
     }
-    fn info(&mut self) -> Result<(), Error> {
+    fn info(&mut self, fields: &[contract::Field]) -> Result<(), Error> {
         self.int(1)?; // typed-object presence flag, before service info data
-        for field in contract::SERVICE_INFO {
+        for field in fields.iter().copied() {
             match field {
                 contract::Field::Int(v) => self.int(v)?,
                 contract::Field::Long(v) => {
@@ -330,12 +334,19 @@ impl OwnedParcel {
 struct Shared {
     slot: Mutex<Slot<Strong>>,
     changed: Condvar,
+    /// Selects the client callbacks this session tolerates; fixed at creation.
+    profile: Profile,
 }
 impl Shared {
+    #[cfg(test)]
     fn new() -> Self {
+        Self::for_profile(Profile::ReferenceApi34)
+    }
+    fn for_profile(profile: Profile) -> Self {
         Self {
             slot: Mutex::new(Slot::default()),
             changed: Condvar::new(),
+            profile,
         }
     }
     fn closing(&self) {
@@ -480,10 +491,28 @@ fn dispatch(binder: *mut Binder, code: u32, parcel: *const Parcel) -> i32 {
     };
     let invalid_before = slot.counters.invalid;
     let result = match code {
+        contract::INIT if shared.profile == Profile::SamsungA16xApi36 => {
+            // This build calls init again with a null connection while it resets
+            // the session; that is a revocation notice, not a malformed callback.
+            match decode_init_nullable(&mut reader) {
+                Ok(Some((id, connection))) => slot.accept(id, connection),
+                Ok(None) => {
+                    slot.revocations = slot.revocations.saturating_add(1);
+                    Ok(())
+                }
+                Err(error) => Err(error),
+            }
+        }
         contract::INIT => {
             decode_init(&mut reader).and_then(|(id, connection)| slot.accept(id, connection))
         }
-        contract::INTERRUPT | contract::CLEAR_CACHE => reader.finish(),
+        contract::INTERRUPT | contract::CLEAR_CACHE => {
+            slot.invalidations = slot.invalidations.saturating_add(1);
+            reader.finish()
+        }
+        contract::SYSTEM_ACTIONS_CHANGED if shared.profile == Profile::SamsungA16xApi36 => {
+            reader.finish()
+        }
         _ => {
             slot.counters.ignored = slot.counters.ignored.saturating_add(1);
             return -74;
@@ -562,10 +591,13 @@ fn local_binder(
         Err(Error::Runtime("new_binder_returned_null"))
     }
 }
-/// One kernel-spawned worker plus startThreadPool's worker; main never joins.
-/// The pool itself is process-wide and shared (`crate::binder::pool`).
+/// The process-wide pool (`crate::binder::pool`), at the one size every feature
+/// requests so that either may start it. A session needs two workers at most (a
+/// client callback from the system while an app answers a node request); main
+/// never joins.
 fn start_pool() -> Result<(), Error> {
-    crate::binder::pool::start(1).map_err(|_| Error::Runtime("pool_unavailable_or_already_started"))
+    crate::binder::pool::start(crate::binder::pool::THREADS)
+        .map_err(|_| Error::Runtime("pool_unavailable_or_already_started"))
 }
 
 struct Session {
@@ -575,9 +607,13 @@ struct Session {
     shared: Arc<Shared>,
     cleanup_due: bool,
     query_ids: super::query::Ids,
+    profile: Profile,
 }
 impl Session {
     fn open() -> Result<Self, Error> {
+        Self::open_profile(Profile::ReferenceApi34)
+    }
+    fn open_profile(profile: Profile) -> Result<Self, Error> {
         let api = Api::global()?;
         let classes = Classes::global(api)?;
         start_pool()?;
@@ -589,10 +625,11 @@ impl Session {
         if !unsafe { (api.associate)(manager.pointer.as_ptr(), classes.manager.as_ptr()) } {
             return Err(Error::Runtime("manager_descriptor_mismatch"));
         }
-        let shared = Arc::new(Shared::new());
+        let shared = Arc::new(Shared::for_profile(profile));
         let owner = local_binder(api, classes.owner, &shared)?;
         let client = local_binder(api, classes.client, &shared)?;
         Ok(Self {
+            profile,
             manager,
             _owner: owner,
             client,
@@ -605,9 +642,14 @@ impl Session {
         let mut request = OwnedParcel::new(&self.manager)?;
         request.binder(&self._owner)?;
         request.binder(&self.client)?;
-        request.info()?;
-        request.int(0)?; // initial reference emulator, user 0 only
-        request.int(contract::DONT_SUPPRESS)?;
+        request.info(self.profile.service_info())?;
+        request.int(0)?; // user 0 only, on every pinned profile
+        let flags = contract::registration_flags();
+        if flags != 1 {
+            // Zero would unbind the user's accessibility services for the session.
+            return Err(Error::Runtime("registration_flags"));
+        }
+        request.int(flags)?;
         self.cleanup_due = true; // uncertain transport failure may still have registered
         let result = request.call(&self.manager, contract::REGISTER, "register");
         if matches!(
@@ -679,8 +721,10 @@ pub(super) fn probe(hold_ms: u32) -> Outcome {
     probe_mode(hold_ms, false)
 }
 
+/// At most one automation session of this process at a time, whatever the command.
+static EXCLUSIVE: Mutex<()> = Mutex::new(());
+
 pub(super) fn probe_mode(hold_ms: u32, query_node: bool) -> Outcome {
-    static EXCLUSIVE: Mutex<()> = Mutex::new(());
     let Ok(_exclusive) = EXCLUSIVE.try_lock() else {
         return Outcome {
             error: Some(Error::Conflict),

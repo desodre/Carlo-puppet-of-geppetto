@@ -12,6 +12,15 @@
 use super::native::Library;
 use std::{ffi::c_void, sync::OnceLock};
 
+/// Kernel-spawned workers every feature of this process requests (plus the one
+/// `ABinderProcess_startThreadPool` creates). The maximum can only be set before
+/// the start, so the first caller decides for the process: all callers ask for
+/// this one value and either order works. Sized by the display mirror, whose
+/// encoder producer is called by the compositor for every frame while the
+/// display service calls back; an automation session alone needs two. Workers
+/// are only spawned on demand.
+pub(crate) const THREADS: u32 = 4;
+
 /// Why the process pool cannot serve a caller. Carries no platform text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum PoolError {
@@ -36,7 +45,8 @@ unsafe impl Sync for Pool {}
 
 /// Start the pool with `max_threads` kernel-spawned workers (plus the one worker
 /// `ABinderProcess_startThreadPool` creates), or confirm that the pool this
-/// helper already started is at least that large. The first caller decides.
+/// helper already started is at least that large. The first caller decides, so
+/// callers pass [`THREADS`].
 pub(crate) fn start(max_threads: u32) -> Result<(), PoolError> {
     static POOL: OnceLock<Result<Pool, PoolError>> = OnceLock::new();
     match POOL.get_or_init(|| launch(max_threads)) {

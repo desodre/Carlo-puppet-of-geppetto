@@ -105,13 +105,18 @@ class SessionTests(unittest.TestCase):
         self.assertNotIn("stdout", result)
         self.assertTrue(result["cleanup_removed"])
         json.dumps(result)
-        self.assertEqual(BINARY_COMMANDS, {"video-encode-dump", "display-mirror-dump"})
+        self.assertEqual(
+            BINARY_COMMANDS, {"video-encode-dump", "display-mirror-dump", "hierarchy-dump"}
+        )
         self.assertEqual(COMMANDS["display-mirror-probe"], ["display-mirror-probe"])
         self.assertEqual(COMMANDS["display-mirror-dump"], ["display-mirror-dump"])
         self.assertEqual(COMMANDS["display-fault-probe"], ["display-fault-probe"])
         for command, path in [
             ("video-encode-dump", None),
             ("display-mirror-dump", None),
+            ("hierarchy-dump", None),
+            ("hierarchy-probe", output),
+            ("hierarchy-tests", output),
             ("display-mirror-probe", output),
             ("doctor", output),
         ]:
@@ -119,6 +124,25 @@ class SessionTests(unittest.TestCase):
             with self.assertRaises(SessionError):
                 run_session(adb, self.manifest, command, 1, False, path)
             self.assertEqual(adb.calls, [])
+
+    def test_hierarchy_dump_is_file_only_and_its_test_run_is_filtered(self):
+        adb, output = FakeAdb(), Path(self.temp.name) / "out/hierarchy.xml"
+        result = run_session(adb, self.manifest, "hierarchy-dump", 1, False, output)
+        self.assertEqual(result["command"], ["hierarchy-dump"])
+        self.assertEqual(result["stdout_bytes"], len(output.read_bytes()))
+        # UI contents never enter the JSON report, only their size and digest.
+        self.assertNotIn("stdout", result)
+        self.assertTrue(result["cleanup_removed"])
+        adb = FakeAdb()
+        result = run_session(adb, self.manifest, "hierarchy-probe", 1, False)
+        self.assertEqual(result["command"], ["hierarchy-probe"])
+        self.assertIn("stdout", result)
+        self.assertEqual(
+            COMMANDS["hierarchy-tests"],
+            ["accessibility::hierarchy::android_", "--test-threads=1", "--nocapture"],
+        )
+        # The unfiltered harness run is unchanged.
+        self.assertEqual(COMMANDS["accessibility-tests"], ["--test-threads=1", "--nocapture"])
 
     def test_timeout_and_push_failure_both_clean_owned_directory(self):
         adb = FakeAdb(failure=subprocess.TimeoutExpired("adb", 1))

@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+- Add a complete accessibility hierarchy snapshot on a second pinned profile
+  (#36, #37, #38, #39, #40, #41, #42, #43; refs #5). **Host-tested only: nothing
+  in this entry was executed on a device.** `hierarchy-probe` reports counters,
+  limits and the typed error as JSON without any UI content; `hierarchy-dump`
+  prints a uiautomator-compatible XML document, or nothing and exit 69 unless
+  the whole snapshot succeeded. Contract and limits: `docs/hierarchy.md`.
+  - Profiles are data selected by exact fingerprint, API, architecture and shell
+    UID: `reference_api34` (unchanged session and single-node proofs; hierarchy
+    answers `unsupported_profile`) and `samsung_a16x_api36` (window list, batched
+    node answers, 23-field service info), recorded in
+    `docs/compat/samsung-a16x-api36-accessibility.json`; executed on that build
+    with parity against `uiautomator dump` on the fixture. Any other device gets no Binder call.
+  - Registration flags are asserted to be exactly 1 so the user's accessibility
+    services are never suppressed.
+  - A separate API 36 node layout (bits 0..49) next to the untouched API 34 one;
+    typed-list callbacks, the invalid-window sentinel and the `getWindows` reply
+    are decoded in safe Rust with field-naming errors.
+  - The walk prefetches descendants depth first, deduplicates by window and node
+    id, keeps no cache between snapshots, retries an inconsistent attempt at
+    most twice and never returns a partial tree: `inconsistent_snapshot`,
+    `truncated` (deadline 10 s, 10 000 nodes, depth 128, XML 4 MiB) and
+    `unsupported_node` are typed errors. Rotation is reported as `unknown`.
+  - The Binder pool is requested at one documented size (`pool::THREADS`, 4) by
+    the automation session and the display mirror, so either may start it.
+  - Tooling: `android_session.py` gains `hierarchy-probe`, `hierarchy-dump`
+    (file-only output) and `hierarchy-tests` (one profile-gated snapshot through
+    the test harness); `tools/test_hierarchy_xml.py` parses the golden document
+    shared with the Rust writer test. `serve` does not offer the hierarchy yet.
 - `serve` gains the video channel and stream control (#30, #35, #44, #46, #51).
   After the control `hello` the same listener admits exactly one more
   connection within 10 s: peer credentials first, then one

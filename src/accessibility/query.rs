@@ -40,13 +40,42 @@ impl Envelope {
     }
 }
 
-pub(super) struct Pending {
+/// A callback result that names the request it answers.
+pub(super) trait Correlated {
+    fn interaction_id(&self) -> i32;
+}
+impl Correlated for Envelope {
+    fn interaction_id(&self) -> i32 {
+        self.interaction_id
+    }
+}
+
+/// What a per-request callback object can deliver: the API 34 single-node
+/// envelope or an API 36 node list.
+pub(super) enum Reply {
+    Single(Box<Envelope>),
+    Batch(super::node::Batch),
+}
+impl Correlated for Reply {
+    fn interaction_id(&self) -> i32 {
+        match self {
+            Self::Single(envelope) => envelope.interaction_id,
+            Self::Batch(batch) => batch.interaction_id,
+        }
+    }
+}
+
+/// The API 34 single-envelope state; `Awaiting` is the same machine for any reply.
+#[cfg(test)]
+pub(super) type Pending = Awaiting<Envelope>;
+
+pub(super) struct Awaiting<T> {
     id: i32,
     deadline: Instant,
     closed: bool,
-    result: Option<Result<Envelope, Error>>,
+    result: Option<Result<T, Error>>,
 }
-impl Pending {
+impl<T: Correlated> Awaiting<T> {
     pub(super) fn new(id: i32, deadline: Instant) -> Self {
         Self {
             id,
@@ -55,23 +84,19 @@ impl Pending {
             result: None,
         }
     }
-    pub(super) fn receive(&mut self, result: Result<Envelope, Error>, now: Instant) {
+    pub(super) fn receive(&mut self, result: Result<T, Error>, now: Instant) {
         if self.closed || self.result.is_some() || now >= self.deadline {
             return;
         }
         if result
             .as_ref()
-            .is_ok_and(|value| value.interaction_id != self.id)
+            .is_ok_and(|value| value.interaction_id() != self.id)
         {
             return;
         }
         self.result = Some(result);
     }
-    pub(super) fn poll(
-        &mut self,
-        now: Instant,
-        cancelled: bool,
-    ) -> Option<Result<Envelope, Error>> {
+    pub(super) fn poll(&mut self, now: Instant, cancelled: bool) -> Option<Result<T, Error>> {
         if cancelled || self.closed {
             self.close();
             return Some(Err(Error::Cancelled));
@@ -158,5 +183,60 @@ mod tests {
         assert_eq!(ids.next(), Ok(2));
         ids.0 = i32::MAX;
         assert_eq!(ids.next(), Err(Error::QueryIdExhausted));
+    }
+}
+
+#[cfg(test)]
+mod reply_tests {
+    use super::*;
+    use crate::accessibility::node::Batch;
+    use std::time::Duration;
+
+    fn batch(id: i32) -> Reply {
+        Reply::Batch(Batch {
+            interaction_id: id,
+            nodes: Vec::new(),
+        })
+    }
+
+    #[test]
+    fn a_batch_for_another_request_never_satisfies_this_one() {
+        let now = Instant::now();
+        let mut pending = Awaiting::<Reply>::new(5, now + Duration::from_secs(1));
+        pending.receive(Ok(batch(4)), now);
+        assert!(pending.poll(now, false).is_none());
+        pending.receive(Ok(batch(5)), now);
+        pending.receive(Ok(batch(5)), now);
+        assert!(matches!(
+            pending.poll(now, false),
+            Some(Ok(Reply::Batch(Batch {
+                interaction_id: 5,
+                ..
+            })))
+        ));
+        assert!(matches!(
+            pending.poll(now, false),
+            Some(Err(Error::Cancelled))
+        ));
+    }
+
+    #[test]
+    fn the_window_gone_sentinel_ends_the_pending_request_and_late_answers_are_dropped() {
+        let now = Instant::now();
+        // The decoder turns (null, 0x7fffffff) into this error: it carries no
+        // request id, and it must end the request instead of looking stale.
+        let mut pending = Awaiting::<Reply>::new(9, now + Duration::from_secs(1));
+        pending.receive(Err(Error::WindowGone), now);
+        assert!(matches!(
+            pending.poll(now, false),
+            Some(Err(Error::WindowGone))
+        ));
+        let mut late = Awaiting::<Reply>::new(10, now + Duration::from_secs(1));
+        late.receive(Ok(batch(10)), now + Duration::from_secs(1));
+        assert!(late.poll(now, false).is_none());
+        assert!(matches!(
+            late.poll(now + Duration::from_secs(1), false),
+            Some(Err(Error::QueryTimeout))
+        ));
     }
 }

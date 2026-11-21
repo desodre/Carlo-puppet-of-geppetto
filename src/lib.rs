@@ -4,7 +4,9 @@
 //! and its classified failures exist for one pinned build only. `serve` offers
 //! one client a control channel and a video channel bound to the same session
 //! over a Unix socket; the video channel streams the mirrored main display on
-//! that pinned build only. Hierarchy commands are not implemented.
+//! that pinned build only. A complete hierarchy snapshot (`hierarchy-probe`,
+//! `hierarchy-dump`) exists for one pinned build only and is not yet offered
+//! through `serve`.
 
 mod accessibility;
 pub mod binder;
@@ -70,6 +72,27 @@ pub fn run(command: Command, output: &mut impl Write) -> Result<(), CarloError> 
             } else {
                 Err(CarloError::UnsupportedFeature(
                     "node query proof did not pass; see JSON report",
+                ))
+            }
+        }
+        Command::HierarchyProbe { dump } => {
+            let mut report = accessibility::hierarchy::collect()?;
+            if dump {
+                // The document is the only stdout data; a failed snapshot emits none.
+                let data = report
+                    .take_document()
+                    .ok_or(CarloError::UnsupportedFeature(
+                        "hierarchy snapshot did not pass; run hierarchy-probe",
+                    ))?;
+                return output.write_all(&data).map_err(CarloError::output);
+            }
+            serde_json::to_writer_pretty(&mut *output, &report)?;
+            writeln!(output).map_err(CarloError::output)?;
+            if report.passed() {
+                Ok(())
+            } else {
+                Err(CarloError::UnsupportedFeature(
+                    "hierarchy snapshot did not pass; see JSON report",
                 ))
             }
         }
