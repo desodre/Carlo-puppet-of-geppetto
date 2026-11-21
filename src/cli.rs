@@ -15,12 +15,18 @@ Commands:
   binder-probe     API 34 shell Binder/ServiceManager proof (JSON)
   video-encode-probe  Encode synthetic GLES frames to H.264; report metadata (JSON)
   video-encode-dump   Emit that synthetic H.264 Annex B stream as command data
+  surface-parcel-probe  Flatten the frameless encoder input surface; report metadata (JSON)
+  display-mirror-probe  Mirror the default display into the H.264 encoder (pinned build only; JSON)
+  display-mirror-dump   Emit that mirrored H.264 Annex B stream as command data
   serve            Reserved for P3; currently returns unavailable (69)
   --version, -V    Show the package version
   --help, -h       Show this help
 
 Doctor checks the native foundation, not Binder or video compatibility.
-Video probes encode generated frames only; they never capture a display.
+Video encode probes use generated frames only; they never capture a display.
+Display mirror commands send one private display-service transaction and are
+refused outside the single pinned build; the dump contains screen contents.
+The surface parcel stays in this process: nothing is transacted or mirrored.
 Exit codes: 0 success, 64 invalid arguments, 69 unavailable, 74 I/O or serialization.
 ";
 
@@ -49,6 +55,14 @@ pub enum Command {
     NodeReadProbe,
     /// Encode synthetic frames; emit stream metadata, or the raw stream on stdout.
     VideoEncodeProbe {
+        /// Write Annex B bytes instead of the JSON report.
+        dump: bool,
+    },
+    /// Flatten the frameless encoder input surface into a local parcel; emit metadata.
+    SurfaceParcelProbe,
+    /// Mirror the default display into the encoder on the pinned build; emit
+    /// metadata, or the raw stream (screen contents) on stdout.
+    DisplayMirrorProbe {
         /// Write Annex B bytes instead of the JSON report.
         dump: bool,
     },
@@ -98,6 +112,9 @@ pub fn parse(arguments: impl IntoIterator<Item = String>) -> Result<Command, Car
         (Some("binder-probe"), None) => Ok(Command::BinderProbe),
         (Some("video-encode-probe"), None) => Ok(Command::VideoEncodeProbe { dump: false }),
         (Some("video-encode-dump"), None) => Ok(Command::VideoEncodeProbe { dump: true }),
+        (Some("surface-parcel-probe"), None) => Ok(Command::SurfaceParcelProbe),
+        (Some("display-mirror-probe"), None) => Ok(Command::DisplayMirrorProbe { dump: false }),
+        (Some("display-mirror-dump"), None) => Ok(Command::DisplayMirrorProbe { dump: true }),
         (Some("serve"), None) => Ok(Command::Serve),
         _ => Err(CarloError::InvalidArguments(
             "unknown command or option; use --help",
@@ -119,6 +136,9 @@ mod tests {
             vec!["serve", "--json"],
             vec!["binder-probe", "--json"],
             vec!["video-encode-dump", "--output"],
+            vec!["surface-parcel-probe", "--json"],
+            vec!["display-mirror-probe", "--json"],
+            vec!["display-mirror-dump", "--output"],
             vec!["doctor", "--json", "extra"],
             vec!["--version", "doctor"],
         ] {
@@ -136,5 +156,19 @@ mod tests {
             Command::Doctor { json: true }
         );
         assert_eq!(parse(Vec::new()).unwrap(), Command::Help);
+        assert_eq!(
+            parse(args(&["surface-parcel-probe"])).unwrap(),
+            Command::SurfaceParcelProbe
+        );
+        assert!(HELP.contains("surface-parcel-probe"));
+        assert_eq!(
+            parse(args(&["display-mirror-probe"])).unwrap(),
+            Command::DisplayMirrorProbe { dump: false }
+        );
+        assert_eq!(
+            parse(args(&["display-mirror-dump"])).unwrap(),
+            Command::DisplayMirrorProbe { dump: true }
+        );
+        assert!(HELP.contains("display-mirror-probe") && HELP.contains("display-mirror-dump"));
     }
 }

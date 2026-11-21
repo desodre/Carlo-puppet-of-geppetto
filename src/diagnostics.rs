@@ -182,6 +182,11 @@ impl Diagnostics {
             .flatten()
     }
 
+    /// Effective UID of this process, when `/proc/self/status` was readable.
+    pub(crate) fn effective_uid(&self) -> Option<u32> {
+        self.effective_uid
+    }
+
     /// Write a human-readable report without logging UI content or credentials.
     ///
     /// # Errors

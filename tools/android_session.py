@@ -23,13 +23,16 @@ COMMANDS = {
     "node-read-probe": ["node-read-probe"],
     "video-encode-probe": ["video-encode-probe"],
     "video-encode-dump": ["video-encode-dump"],
+    "surface-parcel-probe": ["surface-parcel-probe"],
+    "display-mirror-probe": ["display-mirror-probe"],
+    "display-mirror-dump": ["display-mirror-dump"],
     "accessibility-tests": ["--test-threads=1", "--nocapture"],
     "video-tests": ["video::native::", "--test-threads=1", "--nocapture"],
     "accessibility-probe": ["accessibility-probe"],
     "accessibility-hold": ["accessibility-probe", "--hold-ms", "10000"],
 }
 # Stdout of these commands is raw bytes: it goes to a caller-chosen file, never a report.
-BINARY_COMMANDS = {"video-encode-dump"}
+BINARY_COMMANDS = {"video-encode-dump", "display-mirror-dump"}
 ABI_TARGETS = {"x86_64": "x86_64-linux-android", "arm64-v8a": "aarch64-linux-android"}
 
 # Caller data is passed as positional shell arguments, never interpolated as code.

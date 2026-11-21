@@ -130,13 +130,14 @@ def decode(path: Path, requested: dict) -> dict:
 
 def native_tests(adb: Adb, manifest: Path, physical: bool) -> dict:
     """Run only the video FFI tests of the library harness; keep their resource samples."""
-    session = run_session(adb, manifest, "video-tests", 120, physical)
+    session = run_session(adb, manifest, "video-tests", 300, physical)
     stdout = session.get("stdout", "")
     marker = re.search(r"CARLO_VIDEO_RESOURCE_CYCLES (\{.*\})", stdout)
+    result = re.search(r"test result: ok\. (\d+) passed; 0 failed", stdout)
     if (session["exit_code"] != 0 or not session["cleanup_removed"] or marker is None
-            or "test result: ok. 1 passed" not in stdout):
+            or result is None or int(result[1]) < 1):
         raise SessionError("native video test failed, was filtered out or left its directory")
-    return {"passed": 1, "fds_threads": json.loads(marker[1])}
+    return {"passed": int(result[1]), "fds_threads": json.loads(marker[1])}
 
 
 def main():

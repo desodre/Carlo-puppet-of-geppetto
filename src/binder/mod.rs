@@ -9,6 +9,8 @@ use crate::{diagnostics::Diagnostics, error::CarloError};
 
 #[cfg(any(target_os = "android", all(test, unix)))]
 pub(crate) mod native;
+#[cfg(target_os = "android")]
+pub(crate) mod pool;
 
 /// Bounded JSON result of the read-only Binder proof.
 #[derive(Debug, Serialize)]

@@ -1,7 +1,7 @@
 //! Native Android agent foundations: command parsing, diagnostics and typed errors.
 //!
-//! Binder lookup and a synthetic H.264 encoder have API 34 probes. Hierarchy, display
-//! capture, streaming and serve are not implemented.
+//! Binder lookup and a synthetic H.264 encoder have probes. A display mirror proof
+//! exists for one pinned build only. Hierarchy, streaming and serve are not implemented.
 
 mod accessibility;
 pub mod binder;
@@ -96,6 +96,37 @@ pub fn run(command: Command, output: &mut impl Write) -> Result<(), CarloError> 
             } else {
                 Err(CarloError::UnsupportedFeature(
                     "synthetic encoder proof did not pass; see JSON report",
+                ))
+            }
+        }
+        Command::SurfaceParcelProbe => {
+            let report = video::surface::collect()?;
+            serde_json::to_writer_pretty(&mut *output, &report)?;
+            writeln!(output).map_err(CarloError::output)?;
+            if report.passed() {
+                Ok(())
+            } else {
+                Err(CarloError::UnsupportedFeature(
+                    "surface parcel proof did not pass; see JSON report",
+                ))
+            }
+        }
+        Command::DisplayMirrorProbe { dump } => {
+            let mut report = video::mirror::collect(dump)?;
+            if dump {
+                // Stream bytes are the only stdout data; a failed proof emits none.
+                let data = report.take_data().ok_or(CarloError::UnsupportedFeature(
+                    "display mirror proof did not pass; run display-mirror-probe",
+                ))?;
+                return output.write_all(&data).map_err(CarloError::output);
+            }
+            serde_json::to_writer_pretty(&mut *output, &report)?;
+            writeln!(output).map_err(CarloError::output)?;
+            if report.passed() {
+                Ok(())
+            } else {
+                Err(CarloError::UnsupportedFeature(
+                    "display mirror proof did not pass; see JSON report",
                 ))
             }
         }

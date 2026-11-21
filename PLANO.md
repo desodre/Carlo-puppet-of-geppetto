@@ -5,7 +5,9 @@ registro/init/unregister em API 34 x86_64. Projeto Rust 2024, versão 0.1.0, CLI
 Consulta/callback (#22) e decoder mínimo (#23) têm prova no perfil API 34,
 incluindo texto atualizado em fixture controlada, integrados na `main` (PRs #85–#87).
 Encoder H.264 sintético por AMediaCodec + EGL/GLES (#25) tem prova em API 36 arm64;
-isso não é captura de tela. Hierarquia completa, captura e protocolo seguem pendentes.
+isso não é captura de tela. Espelhamento do display real no encoder (#26/#27) tem prova
+em um build Samsung API 36 arm64 por `IDisplayManager`; API 34 e fixture seguem pendentes.
+Framing do protocolo v1 (#33/#34) integrado. Hierarquia completa e transporte seguem pendentes.
 [Evidência P1.1](docs/validation/p1-1-binder.md) e
 [plano aplicado para sessão nativa](docs/plans/p1-accessibility-session.md).
 
