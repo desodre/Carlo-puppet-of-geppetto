@@ -8,8 +8,9 @@ Arquitetura escolhida: Binder + NDK, executando como usuário `shell` por meio d
 
 **Estado atual:** fundação nativa, lookup Binder e bootstrap de sessão de
 acessibilidade validados no emulador de referência API 34 x86_64. Registro, callback
-`init` e unregister funcionam sem Java. Hierarquia, captura e protocolo ainda
-não estão implementados. Versão de desenvolvimento:
+`init` e unregister funcionam sem Java. Hierarquia e captura ainda não estão
+implementadas; do protocolo existem o framing e um canal de controle com
+handshake (`serve`), validados apenas no host. Versão de desenvolvimento:
 `0.1.0`, sem release publicada do agente completo.
 
 ## Propósito
@@ -92,7 +93,26 @@ cargo run -- doctor --json
 
 Doctor no host produz JSON e retorna **69** porque não é um runtime Android.
 No emulador, verifica a fundação e informa explicitamente capacidades ainda
-indisponíveis. `serve` está reservado para P3 e também retorna 69 nesta versão.
+indisponíveis.
+
+`serve --session-dir <dir>` abre um único canal de controle (#31, #32): valida o
+diretório (absoluto, real, do próprio usuário, modo 0700), cria `control.sock`
+(0600), imprime uma linha JSON de prontidão com o identificador de sessão, aceita
+exatamente um cliente do mesmo UID e responde `hello`, `ping`, `capabilities` e
+`shutdown`. Hierarquia, vídeo, `stats` e segundo canal ainda não existem: esses
+comandos respondem `unavailable` e a capacidade `serve_protocol` do doctor
+continua `false`. Se a plataforma negar a criação do arquivo de socket (visto em
+Samsung API 36: `EACCES` em diretório 0700 do shell), o agente usa um socket
+abstrato `carlo-<32 hex>` aleatório e informa `"transport":"abstract"` na linha
+de prontidão; a checagem de credenciais do par, o cliente único e o identificador
+de sessão passam a ser todo o controle de acesso. Contrato em
+[docs/protocol.md](docs/protocol.md). Validado no host; nenhuma sessão completa
+foi executada em dispositivo ainda (`tools/smoke_serve.py` expõe com
+`adb forward` `localfilesystem:` ou `localabstract:` conforme o transporte).
+
+```sh
+python3 tools/smoke_serve.py --serial emulator-5554 --manifest dist/manifest.json
+```
 
 ```sh
 cargo fmt --all -- --check
@@ -113,10 +133,11 @@ diretório exclusivo, removido ao terminar. `--allow-physical` exige autorizaç�
 prévia para esse aparelho. Os comandos disponíveis são `doctor`, `version`,
 `binder-probe`, `accessibility-probe`, `accessibility-hold`, `node-query-probe`, `node-read-probe`,
 `video-encode-probe`, `video-encode-dump`, `surface-parcel-probe`, `display-mirror-probe`,
-`display-mirror-dump`, `display-fault-probe`, `video-tests` e `serve`; use
+`display-mirror-dump`, `display-fault-probe` e `video-tests`; use
 `--report` para salvar evidência JSON e `--timeout` para prazo limitado.
 Comandos de saída binária (`video-encode-dump`, `display-mirror-dump`) exigem
-`--binary-output <arquivo>`.
+`--binary-output <arquivo>`. `serve` bloqueia à espera de cliente e por isso é
+exercitado por `tools/smoke_serve.py`, não por esta sessão.
 Smoke test em emulador já iniciado:
 
 ```sh
@@ -235,7 +256,9 @@ sem retry automático. Callback tem deadline de 5 s; host cobre Binder preso.
 Hierarquia completa/XML continuam pendentes. [Plano #23/#78](docs/plans/p1-node-decoder.md)
 e [validação](docs/validation/p1-node-decoder.md).
 
-Códigos do agente: 0 sucesso, 64 argumentos inválidos, 69 indisponível, 74 I/O/JSON.
+Códigos do agente: 0 sucesso, 64 argumentos inválidos, 69 indisponível (inclui
+diretório de sessão ou socket recusado), 74 I/O/JSON ou sessão `serve` encerrada
+com falha (handshake, framing, prazo, par recusado ou sinal).
 Timeout do helper retorna 124. Detalhes em [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Acompanhamento

@@ -1,10 +1,12 @@
-"""Host codec for Carlo protocol v1 framing; mirrors src/protocol.rs.
+"""Host codec and control client for Carlo protocol v1; mirrors src/protocol.rs.
 
 Header (16 bytes, big-endian): magic `CRLO`, version, kind, two reserved zero
 bytes, request ID (u32) and payload length (u32). The header is validated before
 any payload byte is read.
 """
 
+import json
+import socket
 import struct
 from typing import BinaryIO, NamedTuple
 
@@ -80,3 +82,48 @@ def read_frame(stream: BinaryIO) -> Frame | None:
             "unknown_kind", f"kind {kind}", recoverable=True, request_id=request_id
         )
     return Frame(kind, request_id, payload)
+
+
+class ControlClient:
+    """Blocking request/response client for the control channel of `carlo serve`.
+
+    Every wait is bounded by the socket timeout. Request IDs are assigned here and
+    the echoed ID of each response is checked.
+    """
+
+    def __init__(self, connection: socket.socket, timeout: float = 10):
+        connection.settimeout(timeout)
+        self.connection, self.reader, self.next_id = connection, connection.makefile("rb"), 1
+
+    def send(self, data: bytes) -> None:
+        """Write raw bytes, for frames the codec itself refuses to build."""
+        self.connection.sendall(data)
+
+    def receive(self) -> tuple[int, dict] | None:
+        """One control response as (request ID, JSON object); None once the agent closed."""
+        try:
+            frame = read_frame(self.reader)
+        except ConnectionResetError:
+            return None
+        if frame is None:
+            return None
+        if frame.kind != CONTROL:
+            raise ProtocolError("unexpected_kind", f"kind {frame.kind} on the control channel")
+        message = json.loads(frame.payload)
+        if not isinstance(message, dict):
+            raise ProtocolError("invalid_response", "control payload is not an object")
+        return frame.request_id, message
+
+    def call(self, message: dict) -> dict:
+        request_id, self.next_id = self.next_id, self.next_id + 1
+        self.send(encode(CONTROL, request_id, json.dumps(message).encode()))
+        response = self.receive()
+        if response is None:
+            raise ProtocolError("closed", "agent closed the connection before responding")
+        if response[0] != request_id:
+            raise ProtocolError("invalid_response", "response does not echo the request ID")
+        return response[1]
+
+    def close(self) -> None:
+        self.reader.close()
+        self.connection.close()

@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+- Implement `carlo serve --session-dir <dir>`: one control channel for exactly
+  one client over `<dir>/control.sock` (#31, #32). The directory must be absolute,
+  real, owned by the effective user and mode 0700; the socket is created 0600
+  under a temporary umask, an existing path is refused, and the path is removed
+  as soon as the client is accepted and on every exit. A 128-bit session
+  identifier from `/dev/urandom` is printed on a single JSON ready line and must
+  be presented in `hello`; the peer's `SO_PEERCRED` UID must equal the agent's
+  (root also accepted on Android only). Handshake reports protocol, agent
+  version, API/ABI, limits and the doctor capability list (all still `false`,
+  `serve_protocol` included). `ping`, `capabilities` and `shutdown` work;
+  `hierarchy.dump`, `display.info`, `video.start`, `video.stop` and `stats`
+  answer `unavailable`. Accept, handshake, idle and write waits are bounded and
+  SIGHUP/SIGINT/SIGTERM end the process with the socket removed. `serve` without
+  a valid `--session-dir` is now an argument error (64) instead of 69. Validated
+  on the host with Rust and Python clients.
+- `serve` falls back to an abstract-namespace socket `carlo-<32 hex>` (fresh
+  random name, unrelated to the session identifier) only when creating the
+  socket file is denied, as observed on a Samsung API 36 user build (`EACCES`
+  in a shell-owned 0700 directory; SELinux cause inferred). The ready line now
+  carries `"transport":"filesystem"|"abstract"`. Peer-credential check, single
+  accept, session identifier and handshake deadline are unchanged and are the
+  whole access control for the abstract transport. `tools/smoke_serve.py`
+  forwards with `localfilesystem:` or `localabstract:` accordingly, records the
+  transport, and reports the agent's exit code and a sanitised stderr tail when
+  no ready line arrives. Three consecutive smoke runs passed on that build over the abstract
+  transport (#31, #32).
+- Restore `pub mod protocol` in `src/lib.rs`: the declaration was lost in a
+  merge, so the framing module and its tests were not being compiled.
+- `tools/android_session.py`: drop the `serve` command (it now blocks) and split
+  `resolve_artifact`, `create_directory` and `deploy` out of `run_session` for
+  the serve smoke; add `ControlClient` to `tools/carlo_protocol.py`.
 - Classify three display mirror failures apart from every other error, as
   `failure_class` in the outcome: `permission_denied` (service
   `SecurityException`), `display_absent` (target id missing from

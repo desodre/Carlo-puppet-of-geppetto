@@ -19,7 +19,7 @@ Commands:
   display-mirror-probe  Mirror the default display into the H.264 encoder (pinned build only; JSON)
   display-mirror-dump   Emit that mirrored H.264 Annex B stream as command data
   display-fault-probe   Provoke the classified mirror failures (pinned build only; JSON)
-  serve            Reserved for P3; currently returns unavailable (69)
+  serve --session-dir DIR  One-client control channel on DIR/control.sock
   --version, -V    Show the package version
   --help, -h       Show this help
 
@@ -30,7 +30,13 @@ refused outside the single pinned build; the dump contains screen contents.
 The fault probe provokes permission_denied, display_absent and unsupported_format
 in three isolated sessions and passes only if no display was created.
 The surface parcel stays in this process: nothing is transacted or mirrored.
-Exit codes: 0 success, 64 invalid arguments, 69 unavailable, 74 I/O or serialization.
+Serve needs an absolute DIR owned by the caller with mode 0700. It prints one
+JSON ready line with the transport and session identifier, accepts exactly one
+same-UID client and offers hello, ping, capabilities and shutdown only. If the
+socket file cannot be created (permission denied) it uses a random abstract
+socket instead and says so on the ready line (docs/protocol.md).
+Exit codes: 0 success, 64 invalid arguments, 69 unavailable or refused,
+74 I/O, serialization or a failed serve session.
 ";
 
 /// A validated CLI command.
@@ -71,8 +77,11 @@ pub enum Command {
     },
     /// Provoke the three classified mirror failures on the pinned build; emit metadata.
     DisplayFaultProbe,
-    /// Reserved entry point for the future session protocol.
-    Serve,
+    /// Serve the one-client control channel from a private session directory.
+    Serve {
+        /// Absolute directory, owned by the caller with mode 0700, for the socket.
+        session_dir: String,
+    },
 }
 
 /// Parse arguments excluding the executable name.
@@ -104,6 +113,25 @@ pub fn parse(arguments: impl IntoIterator<Item = String>) -> Result<Command, Car
         }
         return Ok(Command::AccessibilityProbe { hold_ms });
     }
+    if first.as_deref() == Some("serve") {
+        let session_dir = match (second.as_deref(), arguments.next()) {
+            (Some("--session-dir"), Some(directory)) => directory,
+            _ => {
+                return Err(CarloError::InvalidArguments(
+                    "serve requires --session-dir <absolute directory>",
+                ));
+            }
+        };
+        if arguments.next().is_some() {
+            return Err(CarloError::InvalidArguments("too many arguments"));
+        }
+        if !std::path::Path::new(&session_dir).is_absolute() {
+            return Err(CarloError::InvalidArguments(
+                "session directory must be an absolute path",
+            ));
+        }
+        return Ok(Command::Serve { session_dir });
+    }
     if arguments.next().is_some() {
         return Err(CarloError::InvalidArguments("too many arguments"));
     }
@@ -121,7 +149,6 @@ pub fn parse(arguments: impl IntoIterator<Item = String>) -> Result<Command, Car
         (Some("display-mirror-probe"), None) => Ok(Command::DisplayMirrorProbe { dump: false }),
         (Some("display-mirror-dump"), None) => Ok(Command::DisplayMirrorProbe { dump: true }),
         (Some("display-fault-probe"), None) => Ok(Command::DisplayFaultProbe),
-        (Some("serve"), None) => Ok(Command::Serve),
         _ => Err(CarloError::InvalidArguments(
             "unknown command or option; use --help",
         )),
@@ -139,7 +166,12 @@ mod tests {
     #[test]
     fn rejects_options_that_could_be_silently_ignored() {
         for values in [
+            vec!["serve"],
             vec!["serve", "--json"],
+            vec!["serve", "--session-dir"],
+            vec!["serve", "--session-dir", "relative/dir"],
+            vec!["serve", "--session-dir", "/tmp/a", "extra"],
+            vec!["serve", "/tmp/a"],
             vec!["binder-probe", "--json"],
             vec!["video-encode-dump", "--output"],
             vec!["surface-parcel-probe", "--json"],
@@ -183,5 +215,12 @@ mod tests {
             Command::DisplayFaultProbe
         );
         assert!(HELP.contains("display-fault-probe"));
+        assert_eq!(
+            parse(args(&["serve", "--session-dir", "/data/local/tmp/x"])).unwrap(),
+            Command::Serve {
+                session_dir: "/data/local/tmp/x".into()
+            }
+        );
+        assert!(HELP.contains("serve --session-dir"));
     }
 }

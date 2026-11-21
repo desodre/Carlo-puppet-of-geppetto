@@ -79,7 +79,7 @@ impl Diagnostics {
         ))
     }
 
-    fn from_environment(
+    pub(crate) fn from_environment(
         platform: &'static str,
         architecture: &'static str,
         android_api: Option<u32>,
@@ -164,7 +164,7 @@ impl Diagnostics {
                 Capability {
                     name: "serve_protocol",
                     available: false,
-                    reason: "not implemented; P3",
+                    reason: "control channel only (handshake, ping, shutdown); no data commands yet; P3",
                 },
             ],
         }
@@ -180,6 +180,21 @@ impl Diagnostics {
         (self.foundation_ready && self.effective_uid == Some(2000))
             .then_some(self.android_api)
             .flatten()
+    }
+
+    /// Android API level reported by the platform; `None` off Android.
+    pub(crate) fn android_api(&self) -> Option<u32> {
+        self.android_api
+    }
+
+    /// Device ABI property; `None` off Android.
+    pub(crate) fn device_abi(&self) -> Option<&str> {
+        self.device_abi.as_deref()
+    }
+
+    /// The single capability list shared by `doctor` and the `serve` handshake.
+    pub(crate) fn capabilities(&self) -> &[Capability] {
+        &self.capabilities
     }
 
     /// Effective UID of this process, when `/proc/self/status` was readable.
