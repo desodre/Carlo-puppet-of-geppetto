@@ -113,7 +113,7 @@ diretório exclusivo, removido ao terminar. `--allow-physical` exige autorizaç�
 prévia para esse aparelho. Os comandos disponíveis são `doctor`, `version`,
 `binder-probe`, `accessibility-probe`, `accessibility-hold`, `node-query-probe`, `node-read-probe`,
 `video-encode-probe`, `video-encode-dump`, `surface-parcel-probe`, `display-mirror-probe`,
-`display-mirror-dump`, `video-tests` e `serve`; use
+`display-mirror-dump`, `display-fault-probe`, `video-tests` e `serve`; use
 `--report` para salvar evidência JSON e `--timeout` para prazo limitado.
 Comandos de saída binária (`video-encode-dump`, `display-mirror-dump`) exigem
 `--binary-output <arquivo>`.
@@ -204,6 +204,21 @@ qualquer outro perfil retorna `unsupported_profile` sem nenhuma chamada Binder.
 display foi criado e liberado; `video_available` permanece `false`. Janelas
 seguras saem em branco e tela desligada não produz quadros. Executado nesse build; evidência em
 [docs/validation/p2-2-display-mirror.md](docs/validation/p2-2-display-mirror.md).
+
+Antes de pedir o espelho, a sessão lista os displays (`IDisplayManager.getDisplayIds`)
+e exige o display alvo na lista. Três falhas têm classe própria em
+`outcome.failure_class`, nunca fundidas num erro genérico: `permission_denied`
+(`SecurityException` do serviço), `display_absent` (alvo fora da lista; nenhum
+display é pedido) e `unsupported_format` (o encoder recusa a configuração antes de
+qualquer chamada ao serviço de display). `display-fault-probe` provoca as três em
+sessões isoladas, no mesmo build exato, e só passa se cada uma devolver exatamente
+a sua classe e nenhum display for criado; `screen_capture` e `video_available`
+ficam `false`. A listagem e o `display-fault-probe` foram executados nesse build;
+`tools/smoke_display_mirror.py` reconhece o marcador da fixture no vídeo
+decodificado. Evidência em
+[docs/validation/p2-4-capture-faults-fixture.md](docs/validation/p2-4-capture-faults-fixture.md). O emulador de referência
+API 34 x86_64 não foi executado e permanece não suportado; dependências de runtime
+e perfis em [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md).
 
 ```sh
 python3 tools/build_accessibility_tests.py --target aarch64-linux-android

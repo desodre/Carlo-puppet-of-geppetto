@@ -219,6 +219,79 @@
     ],
     "guard": "Owed from just before the create transaction is sent; sent exactly once on every exit path, including errors and unwinding. Releasing a callback the service does not know is a no-op."
   },
+  "fault_classification": {
+    "execution": {
+      "executed_on_device": true,
+      "evidence": "docs/validation/p2-4-capture-faults-fixture.md",
+      "note": "Executed only on the pinned build."
+    },
+    "get_display_ids": {
+      "transaction": 8,
+      "flags": 0,
+      "oneway": false,
+      "side_effects": "none (read-only)",
+      "evidence": "framework.jar of the profiled device: IDisplayManager$Stub.TRANSACTION_getDisplayIds = 8, cross-checked with the transact literal in IDisplayManager$Stub$Proxy.getDisplayIds(Z)[I",
+      "request_after_interface_token": [
+        {
+          "order": 1,
+          "wire": "i32",
+          "value": 0,
+          "meaning": "includeDisabled = false"
+        }
+      ],
+      "reply": [
+        "Java exception/status header (AParcel_readStatusHeader)",
+        "i32 count as written by Parcel.writeIntArray (-1 = null array)",
+        "count x i32 display id"
+      ],
+      "reply_handling": {
+        "count < 0 (null array) or count > 64": "unexpected_parcel(display_id_count); no element is read",
+        "fewer ids than count": "parcel error with the numeric binder status",
+        "SecurityException (-1)": "permission_denied",
+        "target id not among the ids": "display_absent; no create transaction is sent"
+      },
+      "report": "displays_listed (count only) and target_display_id; the listed ids are not emitted"
+    },
+    "classes": {
+      "permission_denied": "Error permission_denied: SecurityException (-1) in a display-service reply header.",
+      "display_absent": "Error display_absent: the target id is not in the getDisplayIds reply. Decided by Carlo because the service does not reject an unknown displayIdToMirror (it silently mirrors the default display).",
+      "unsupported_format": "Error unsupported_format{operation,status}: nonzero media_status_t from AMediaCodec configure, createInputSurface or start, which run before the display service is looked up.",
+      "unclassified": "Every other error (display_refused for a silent -1 id, illegal_argument, remote_exception, timeout, binder, parcel, ...) keeps failure_class = null."
+    },
+    "display_fault_probe": {
+      "gate": "same exact-profile gate; otherwise every session reports unsupported_profile and no Binder call is made",
+      "sessions_in_order": [
+        {
+          "name": "permission",
+          "request": "flags 20 (AUTO_MIRROR | SECURE), displayIdToMirror 0, 360x640, frames 0",
+          "server_fact": "services.jar DisplayManagerService.createVirtualDisplayInternal: SECURE requires CAPTURE_SECURE_VIDEO_OUTPUT, not held by shell; SecurityException is thrown at the permission gate before any display is created",
+          "transactions": [
+            "getDisplayIds (8)",
+            "createVirtualDisplay (27)",
+            "releaseVirtualDisplay (30, owed by the guard; no-op for an unknown callback)"
+          ],
+          "expected": "permission_denied, display_created = false"
+        },
+        {
+          "name": "display_absent",
+          "request": "flags 16, target = highest listed id + 1000",
+          "transactions": [
+            "getDisplayIds (8)"
+          ],
+          "expected": "display_absent, zero create and release transactions"
+        },
+        {
+          "name": "unsupported_format",
+          "request": "encoder 0x0 (the configuration the native encoder test shows rejected)",
+          "transactions": [],
+          "expected": "unsupported_format, zero display-service transactions; the display service is not looked up"
+        }
+      ],
+      "pass_condition": "all three sessions report exactly the expected class and transaction counts, display_created = false and no release error",
+      "unexpected_display": "If the service returns an id in the permission session it is released immediately (frames 0, same guard) and the probe fails.",
+      "report": "screen_capture = false and video_available = false always"
+    }
+  },
   "callback": {
     "descriptor": "android.hardware.display.IVirtualDisplayCallback",
     "oneway": true,

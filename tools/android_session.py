@@ -26,6 +26,7 @@ COMMANDS = {
     "surface-parcel-probe": ["surface-parcel-probe"],
     "display-mirror-probe": ["display-mirror-probe"],
     "display-mirror-dump": ["display-mirror-dump"],
+    "display-fault-probe": ["display-fault-probe"],
     "accessibility-tests": ["--test-threads=1", "--nocapture"],
     "video-tests": ["video::native::", "--test-threads=1", "--nocapture"],
     "accessibility-probe": ["accessibility-probe"],

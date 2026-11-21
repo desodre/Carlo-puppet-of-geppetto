@@ -927,9 +927,48 @@ mod tests {
         assert_eq!(outcome.error, None);
     }
 
+    /// The three provoked failures, once, through the fault command's own profile
+    /// gate: each must report exactly its class, none may leave a display, and the
+    /// process must return to the resource floor. This is the first test in name
+    /// order (`--test-threads=1`), so its first session starts the Binder thread
+    /// pool before any codec use of the process, as the mirror path requires.
+    #[test]
+    fn android_display_fault_sessions_are_classified_and_release_resources() {
+        let report = crate::video::mirror::collect_faults().unwrap();
+        let json = serde_json::to_value(&report).unwrap();
+        let sessions = &json["sessions"];
+        assert!(report.passed(), "{sessions}");
+        for (index, class) in ["permission_denied", "display_absent", "unsupported_format"]
+            .into_iter()
+            .enumerate()
+        {
+            let outcome = &sessions[index]["outcome"];
+            assert_eq!(outcome["failure_class"], class, "{sessions}");
+            assert_eq!(outcome["display_created"], false, "{sessions}");
+            assert!(outcome["release_error"].is_null(), "{sessions}");
+        }
+        assert_eq!(sessions[1]["outcome"]["transactions"]["create"], 0);
+        assert_eq!(
+            sessions[2]["outcome"]["transactions"],
+            serde_json::json!({"list": 0, "create": 0, "release": 0})
+        );
+        let after = resources();
+        let floor = settled();
+        let recovered = [settled(), settled()];
+        println!(
+            "CARLO_DISPLAY_FAULT_RESOURCE_CYCLES {}",
+            serde_json::json!({"after": after, "floor": floor, "after_idle": recovered})
+        );
+        for sample in recovered {
+            assert!(sample.0 <= floor.0, "{after:?} {floor:?} {recovered:?}");
+            assert!(sample.1 <= floor.1 + 4, "{after:?} {floor:?} {recovered:?}");
+        }
+    }
+
     /// One real create/mirror/release cycle through the command's own profile gate
-    /// and release guard. It must run before any other codec use of this process
-    /// (tests run in name order with `--test-threads=1`): the mirror path owns the
+    /// and release guard. The pool must be started by this path before a codec
+    /// could start a foreign one (tests run in name order with `--test-threads=1`;
+    /// the fault test above does that first): the mirror path owns the
     /// Binder thread pool and refuses one that already exists. Needs the screen on;
     /// an idle screen may yield a single frame, which is enough. The pool workers
     /// and lazily opened drivers it leaves are part of the floor measured after it.
