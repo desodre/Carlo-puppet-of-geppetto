@@ -1,7 +1,14 @@
-//! Display mirror proof (P2.2/P2.3): one private `IDisplayManager.createVirtualDisplay`
+//! Display mirror proof (P2.2-P2.5): after `IDisplayManager.getDisplayIds` showed
+//! the target display, one private `IDisplayManager.createVirtualDisplay`
 //! transaction hands the H.264 encoder's input surface to the display service with
 //! `VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR`, the encoder output is drained, and the
 //! display is released again. No Java, no EGL and no pixel access in this path.
+//!
+//! Three failures are classified apart from every other error ([`FailureClass`]):
+//! the encoder rejecting the format (before the display service is contacted), a
+//! target display the service does not list (before a display is asked for; the
+//! service itself would silently mirror the default display instead), and the
+//! service's `SecurityException`. `display-fault-probe` provokes each one.
 //!
 //! The contract is pinned in `docs/compat/samsung-a16x-api36-display.json` and is
 //! valid for one exact build only: this vendor shifts the AOSP transaction codes,
@@ -33,6 +40,8 @@ const ARCHITECTURE: &str = "aarch64";
 const SHELL_UID: u32 = 2000;
 const SYSTEM_UID: u32 = 1000;
 
+/// `IDisplayManager.getDisplayIds` on the pinned build.
+const LIST: u32 = 8;
 /// `IDisplayManager.createVirtualDisplay` on the pinned build (AOSP 21 + 6).
 const CREATE: u32 = 27;
 /// `IDisplayManager.releaseVirtualDisplay` on the pinned build (AOSP 24 + 6).
@@ -41,8 +50,15 @@ const ON_PAUSED: u32 = 1;
 const ON_RESUMED: u32 = 2;
 const ON_STOPPED: u32 = 3;
 
-/// `DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR`; no other bit is ever sent.
+/// `DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR`; the only bit a mirror sends.
 const FLAG_AUTO_MIRROR: i32 = 16;
+/// `DisplayManager.VIRTUAL_DISPLAY_FLAG_SECURE`. Sent by the permission fault
+/// session only: it needs `CAPTURE_SECURE_VIDEO_OUTPUT`, which shell does not hold.
+const FLAG_SECURE: i32 = 4;
+/// Bound on the `int[]` of `getDisplayIds`, checked before any element is read.
+const MAX_DISPLAYS: i32 = 64;
+/// Distance of the absent-display fault target above the highest listed id.
+const ABSENT_OFFSET: i32 = 1000;
 const DENSITY_DPI: i32 = 160;
 const DEFAULT_DISPLAY: i32 = 0;
 const DISPLAY_NAME: &CStr = c"carlo-mirror";
@@ -94,32 +110,68 @@ enum Field {
     Surface,
 }
 
+/// Which display a session mirrors.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Target {
+    /// This id, which must be in the service's list.
+    Display(i32),
+    /// [`ABSENT_OFFSET`] above the highest listed id: absent by construction
+    /// (fault provocation only).
+    BeyondListed,
+}
+
+/// What one mirror session asks for. Internal: no command line option reaches it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Request {
+    target: Target,
+    /// Bits sent besides `AUTO_MIRROR`; none outside fault provocation.
+    extra_flags: i32,
+    config: Config,
+}
+
+impl Request {
+    /// The only request the mirror commands send.
+    const DEFAULT: Self = Self {
+        target: Target::Display(DEFAULT_DISPLAY),
+        extra_flags: 0,
+        config: PRESET,
+    };
+
+    fn flags(&self) -> i32 {
+        FLAG_AUTO_MIRROR | self.extra_flags
+    }
+}
+
+/// `getDisplayIds(boolean includeDisabled)`: false.
+const LIST_REQUEST: [Field; 1] = [Field::I32(0)];
+
 /// `createVirtualDisplay(VirtualDisplayConfig, IVirtualDisplayCallback,
 /// IMediaProjection, String packageName)` in the pinned field order.
-fn create_request(config: &Config) -> [Field; 22] {
+/// `display_id` is the listed display [`located`] returned for the request.
+fn create_request(request: &Request, display_id: i32) -> [Field; 22] {
     [
         Field::I32(1), // non-null VirtualDisplayConfig
         Field::Str8(DISPLAY_NAME),
-        Field::I32(config.width),
-        Field::I32(config.height),
+        Field::I32(request.config.width),
+        Field::I32(request.config.height),
         Field::I32(DENSITY_DPI),
-        Field::I32(FLAG_AUTO_MIRROR),
+        Field::I32(request.flags()),
         Field::I32(1), // non-null Surface
         Field::Surface,
-        Field::NullStr8,             // uniqueId
-        Field::I32(DEFAULT_DISPLAY), // displayIdToMirror
-        Field::I32(0),               // windowManagerMirroringEnabled
-        Field::I32(0),               // displayCategories: empty ArraySet
-        Field::F32(0.0),             // requestedRefreshRate
-        Field::I32(0),               // isHomeSupported
-        Field::I32(-1),              // null DisplayCutout
-        Field::I32(0),               // ignoreActivitySizeRestrictions
-        Field::F32(0.0),             // defaultBrightness
-        Field::F32(-1.0),            // dimBrightness
-        Field::NullBinder,           // brightnessListener
-        Field::CallbackBinder,       // IVirtualDisplayCallback
-        Field::NullBinder,           // IMediaProjection
-        Field::Str16(PACKAGE),       // packageName
+        Field::NullStr8,        // uniqueId
+        Field::I32(display_id), // displayIdToMirror
+        Field::I32(0),          // windowManagerMirroringEnabled
+        Field::I32(0),          // displayCategories: empty ArraySet
+        Field::F32(0.0),        // requestedRefreshRate
+        Field::I32(0),          // isHomeSupported
+        Field::I32(-1),         // null DisplayCutout
+        Field::I32(0),          // ignoreActivitySizeRestrictions
+        Field::F32(0.0),        // defaultBrightness
+        Field::F32(-1.0),       // dimBrightness
+        Field::NullBinder,      // brightnessListener
+        Field::CallbackBinder,  // IVirtualDisplayCallback
+        Field::NullBinder,      // IMediaProjection
+        Field::Str16(PACKAGE),  // packageName
     ]
 }
 
@@ -179,6 +231,91 @@ fn created_display(reply: &mut impl Reply) -> Result<i32, Error> {
 fn released_display(reply: &mut impl Reply) -> Result<(), Error> {
     let exception = reply.exception("release_display")?;
     check_exception("release_display", exception)
+}
+
+/// Status header, then a Java `int[]` as `Parcel.writeIntArray` wrote it: the
+/// count (-1 for a null array) and that many ids. The count is bounded before an
+/// element is read; a null array is not something this service returns.
+fn listed_displays(reply: &mut impl Reply) -> Result<Vec<i32>, Error> {
+    let exception = reply.exception("list_displays")?;
+    check_exception("list_displays", exception)?;
+    let count = reply.int32("read_display_count")?;
+    if !(0..=MAX_DISPLAYS).contains(&count) {
+        return Err(Error::UnexpectedParcel("display_id_count"));
+    }
+    (0..count)
+        .map(|_| reply.int32("read_listed_display_id"))
+        .collect()
+}
+
+/// The display id `target` names, given the listed ids.
+fn wanted(target: Target, listed: &[i32]) -> Result<i32, Error> {
+    match target {
+        Target::Display(id) => Ok(id),
+        Target::BeyondListed => listed
+            .iter()
+            .copied()
+            .max()
+            .unwrap_or(DEFAULT_DISPLAY)
+            .checked_add(ABSENT_OFFSET)
+            .ok_or(Error::LimitExceeded("display_id")),
+    }
+}
+
+/// `id` if the service lists it. The service does not reject an unknown
+/// `displayIdToMirror` (it mirrors the default display instead), so absence has
+/// to be decided here, before a display is asked for.
+fn located(id: i32, listed: &[i32]) -> Result<i32, Error> {
+    if listed.contains(&id) {
+        Ok(id)
+    } else {
+        Err(Error::DisplayAbsent)
+    }
+}
+
+/// An encoder error from the calls that validate the requested configuration
+/// becomes [`Error::UnsupportedFormat`]; anything else is returned unchanged.
+fn rejected_format(error: Error) -> Error {
+    match error {
+        Error::Codec {
+            operation: operation @ ("configure" | "create_input_surface" | "start"),
+            status,
+        } if status != 0 => Error::UnsupportedFormat { operation, status },
+        other => other,
+    }
+}
+
+/// The three failures a caller must tell apart, derived from the typed error
+/// alone. Every other error has no class.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum FailureClass {
+    /// The display service threw `SecurityException`.
+    PermissionDenied,
+    /// The target display is not in the service's list.
+    DisplayAbsent,
+    /// The encoder rejected the requested configuration.
+    UnsupportedFormat,
+}
+
+impl FailureClass {
+    fn of(error: &Error) -> Option<Self> {
+        match error {
+            Error::PermissionDenied(_) => Some(Self::PermissionDenied),
+            Error::DisplayAbsent => Some(Self::DisplayAbsent),
+            Error::UnsupportedFormat { .. } => Some(Self::UnsupportedFormat),
+            _ => None,
+        }
+    }
+}
+
+/// Transactions a session handed to the display service (attempts: counted just
+/// before each send). Callback traffic and service lookup are not included.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize)]
+struct Transactions {
+    list: u32,
+    create: u32,
+    release: u32,
 }
 
 /// State of the local `IVirtualDisplayCallback`. It is shared with Binder pool
@@ -241,6 +378,11 @@ pub(crate) struct Outcome {
     display_id: Option<i32>,
     /// A display was created and its release transaction was acknowledged.
     pub(super) display_released: bool,
+    /// How many ids the service listed; the ids themselves are not reported.
+    displays_listed: Option<usize>,
+    /// The id that was looked up in that list.
+    target_display_id: Option<i32>,
+    transactions: Transactions,
     callbacks: CallbackCounts,
     codec_name: Option<String>,
     output_width: Option<i32>,
@@ -248,10 +390,18 @@ pub(crate) struct Outcome {
     stream: Stream,
     elapsed_ms: u64,
     pub(super) error: Option<Error>,
+    /// Class of `error`, when it is one of the three classified failures.
+    failure_class: Option<FailureClass>,
     release_error: Option<Error>,
 }
 
 impl Outcome {
+    /// Record how the session ended; the class always follows the error.
+    fn conclude(&mut self, result: Result<(), Error>) {
+        self.error = result.err();
+        self.failure_class = self.error.as_ref().and_then(FailureClass::of);
+    }
+
     /// An idle screen legitimately yields few frames: one coded frame that is
     /// decodable from its own parameter sets and IDR is enough, provided the
     /// display was created and released and nothing failed.
@@ -272,7 +422,21 @@ impl Outcome {
 struct DisplayRequest {
     flags: i32,
     density_dpi: i32,
-    display_id_to_mirror: i32,
+    /// `None` when the id is derived from the listed ids (absent-display fault).
+    display_id_to_mirror: Option<i32>,
+}
+
+impl DisplayRequest {
+    fn of(request: &Request) -> Self {
+        Self {
+            flags: request.flags(),
+            density_dpi: DENSITY_DPI,
+            display_id_to_mirror: match request.target {
+                Target::Display(id) => Some(id),
+                Target::BeyondListed => None,
+            },
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -324,30 +488,42 @@ pub(crate) fn collect(keep_data: bool) -> Result<Report, CarloError> {
     Ok(run(environment, fingerprint, keep_data, probe))
 }
 
-/// Gate, then run `session` at most once. Outside the pinned profile `session`
-/// is never invoked, so no library is opened and no Binder call is made.
+/// One session of `request`, or none: when `permitted` is false `session` is never
+/// invoked, so no library is opened and no Binder call is made.
+fn attempt(
+    permitted: bool,
+    request: &Request,
+    keep_data: bool,
+    session: impl FnOnce(&Request, &mut Collector, &mut Outcome) -> Result<(), Error>,
+) -> (Outcome, Option<Vec<u8>>) {
+    let started = Instant::now();
+    let mut collector = Collector::new(&request.config, keep_data);
+    let mut outcome = Outcome::default();
+    let result = if permitted {
+        session(request, &mut collector, &mut outcome)
+    } else {
+        Err(Error::UnsupportedProfile)
+    };
+    outcome.conclude(result);
+    outcome.stream = collector.stream;
+    outcome.elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+    (outcome, collector.data)
+}
+
+/// Gate, then run `session` at most once with the default request.
 fn run(
     environment: Diagnostics,
     fingerprint: Option<String>,
     keep_data: bool,
-    session: impl FnOnce(&mut Collector, &mut Outcome) -> Result<(), Error>,
+    session: impl FnOnce(&Request, &mut Collector, &mut Outcome) -> Result<(), Error>,
 ) -> Report {
-    let started = Instant::now();
-    let mut collector = Collector::new(&PRESET, keep_data);
-    let mut outcome = Outcome::default();
-    let result = if supported(
+    let permitted = supported(
         environment.shell_api(),
         environment.effective_uid(),
         std::env::consts::ARCH,
         fingerprint.as_deref(),
-    ) {
-        session(&mut collector, &mut outcome)
-    } else {
-        Err(Error::UnsupportedProfile)
-    };
-    outcome.error = result.err();
-    outcome.stream = collector.stream;
-    outcome.elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+    );
+    let (outcome, data) = attempt(permitted, &Request::DEFAULT, keep_data, session);
     Report {
         schema_version: 1,
         environment,
@@ -355,25 +531,189 @@ fn run(
         source: "display_mirror",
         screen_capture: outcome.passed(),
         video_available: false,
-        requested: PRESET,
-        display: DisplayRequest {
-            flags: FLAG_AUTO_MIRROR,
-            density_dpi: DENSITY_DPI,
-            display_id_to_mirror: DEFAULT_DISPLAY,
-        },
+        requested: Request::DEFAULT.config,
+        display: DisplayRequest::of(&Request::DEFAULT),
         outcome,
-        data: collector.data,
+        data,
     }
 }
 
 #[cfg(target_os = "android")]
-fn probe(collector: &mut Collector, outcome: &mut Outcome) -> Result<(), Error> {
-    ffi::mirror(&PRESET, collector, outcome)
+fn probe(request: &Request, collector: &mut Collector, outcome: &mut Outcome) -> Result<(), Error> {
+    ffi::mirror(request, collector, outcome)
 }
 
 #[cfg(not(target_os = "android"))]
-fn probe(_: &mut Collector, _: &mut Outcome) -> Result<(), Error> {
+fn probe(_: &Request, _: &mut Collector, _: &mut Outcome) -> Result<(), Error> {
     unreachable!("profile requires Android")
+}
+
+/// One provoked failure: the request that causes it and what must be observed.
+struct Fault {
+    name: &'static str,
+    request: Request,
+    expected: FailureClass,
+    /// Exactly these transactions may have been handed to the display service.
+    transactions: Transactions,
+}
+
+/// Encoder configuration of the fault sessions that reach the codec: the preset
+/// with no frames, so a display the service unexpectedly created is released at
+/// once instead of being captured.
+const FRAMELESS: Config = Config {
+    frames: 0,
+    ..PRESET
+};
+
+/// The fault sessions, in execution order. The permission session runs first so
+/// that its Binder pool start precedes every codec use of the process.
+const FAULTS: [Fault; 3] = [
+    // SECURE needs CAPTURE_SECURE_VIDEO_OUTPUT: the service throws at its
+    // permission gate, before a display exists. The release owed by the guard is
+    // still sent and is a no-op for a callback the service does not know.
+    Fault {
+        name: "permission",
+        request: Request {
+            target: Target::Display(DEFAULT_DISPLAY),
+            extra_flags: FLAG_SECURE,
+            config: FRAMELESS,
+        },
+        expected: FailureClass::PermissionDenied,
+        transactions: Transactions {
+            list: 1,
+            create: 1,
+            release: 1,
+        },
+    },
+    Fault {
+        name: "display_absent",
+        request: Request {
+            target: Target::BeyondListed,
+            extra_flags: 0,
+            config: FRAMELESS,
+        },
+        expected: FailureClass::DisplayAbsent,
+        transactions: Transactions {
+            list: 1,
+            create: 0,
+            release: 0,
+        },
+    },
+    // The configuration the native encoder test already shows to be rejected.
+    Fault {
+        name: "unsupported_format",
+        request: Request {
+            target: Target::Display(DEFAULT_DISPLAY),
+            extra_flags: 0,
+            config: Config {
+                width: 0,
+                height: 0,
+                ..FRAMELESS
+            },
+        },
+        expected: FailureClass::UnsupportedFormat,
+        transactions: Transactions {
+            list: 0,
+            create: 0,
+            release: 0,
+        },
+    },
+];
+
+/// What one fault session was asked and did.
+#[derive(Debug, Serialize)]
+struct FaultSession {
+    name: &'static str,
+    expected: FailureClass,
+    expected_transactions: Transactions,
+    requested: Config,
+    display: DisplayRequest,
+    /// The expected class and transactions, and no display created or left.
+    passed: bool,
+    outcome: Outcome,
+}
+
+impl FaultSession {
+    fn new(fault: &Fault, outcome: Outcome) -> Self {
+        Self {
+            name: fault.name,
+            expected: fault.expected,
+            expected_transactions: fault.transactions,
+            requested: fault.request.config,
+            display: DisplayRequest::of(&fault.request),
+            passed: outcome.failure_class == Some(fault.expected)
+                && outcome.transactions == fault.transactions
+                && !outcome.display_created
+                && outcome.release_error.is_none(),
+            outcome,
+        }
+    }
+}
+
+#[derive(Serialize)]
+pub(crate) struct FaultReport {
+    schema_version: u32,
+    environment: Diagnostics,
+    runtime_fingerprint: Option<String>,
+    /// Failures are provoked on purpose; nothing is captured.
+    source: &'static str,
+    screen_capture: bool,
+    video_available: bool,
+    sessions: Vec<FaultSession>,
+}
+
+impl FaultReport {
+    /// Every fault produced exactly its class and left no display behind.
+    pub(crate) fn passed(&self) -> bool {
+        self.sessions.len() == FAULTS.len() && self.sessions.iter().all(|session| session.passed)
+    }
+}
+
+/// Provoke the three classified failures on the pinned profile, each in its own
+/// session. Same bounds and gate as [`collect`]; no stream data is kept.
+pub(crate) fn collect_faults() -> Result<FaultReport, CarloError> {
+    let environment = Diagnostics::collect()?;
+    let fingerprint = crate::accessibility::fingerprint()?;
+    Ok(run_faults(environment, fingerprint, probe))
+}
+
+/// Gate, then run `session` once per fault. Outside the pinned profile every
+/// session reports the unsupported profile and `session` is never invoked.
+fn run_faults(
+    environment: Diagnostics,
+    fingerprint: Option<String>,
+    session: impl FnMut(&Request, &mut Collector, &mut Outcome) -> Result<(), Error>,
+) -> FaultReport {
+    let permitted = supported(
+        environment.shell_api(),
+        environment.effective_uid(),
+        std::env::consts::ARCH,
+        fingerprint.as_deref(),
+    );
+    fault_report(permitted, environment, fingerprint, session)
+}
+
+fn fault_report(
+    permitted: bool,
+    environment: Diagnostics,
+    runtime_fingerprint: Option<String>,
+    mut session: impl FnMut(&Request, &mut Collector, &mut Outcome) -> Result<(), Error>,
+) -> FaultReport {
+    FaultReport {
+        schema_version: 1,
+        environment,
+        runtime_fingerprint,
+        source: "display_fault_provocation",
+        screen_capture: false,
+        video_available: false,
+        sessions: FAULTS
+            .iter()
+            .map(|fault| {
+                let (outcome, _) = attempt(permitted, &fault.request, false, &mut session);
+                FaultSession::new(fault, outcome)
+            })
+            .collect(),
+    }
 }
 
 /// libbinder_ndk and libnativewindow C ABI for the mirror session.
@@ -401,13 +741,14 @@ fn probe(_: &mut Collector, _: &mut Outcome) -> Result<(), Error> {
 #[cfg(target_os = "android")]
 mod ffi {
     use super::{
-        CAPTURE, CREATE, Callbacks, END_OF_STREAM, Field, Outcome, RELEASE, RELEASE_REQUEST, Reply,
-        create_request, created_display, released_display, string8_words,
+        CAPTURE, CREATE, Callbacks, END_OF_STREAM, Field, LIST, LIST_REQUEST, Outcome, RELEASE,
+        RELEASE_REQUEST, Reply, Request, create_request, created_display, listed_displays, located,
+        rejected_format, released_display, string8_words, wanted,
     };
     use crate::{
         binder::{native::Library, pool},
         video::{
-            Collector, Config, Error, Outcome as EncoderOutcome,
+            Collector, Error, Outcome as EncoderOutcome,
             native::{ConfiguredInput, Window},
         },
     };
@@ -440,7 +781,8 @@ mod ffi {
         unsafe extern "C" fn(*mut RawBinder, u32, *const RawParcel, *mut RawParcel) -> i32;
 
     const STATUS_BAD_VALUE: i32 = -22;
-    /// A status header plus one int; an exception adds a bounded message and trace.
+    /// A status header plus one int or a bounded id list; an exception adds a
+    /// bounded message and trace.
     const MAX_REPLY_BYTES: i32 = 64 * 1024;
     const DRAIN_SLICE_US: i64 = 10_000;
     /// Kernel-spawned pool workers besides the one `startThreadPool` creates.
@@ -997,24 +1339,45 @@ mod ffi {
         }
     }
 
-    /// Send the create request and drain mirrored frames until `config.frames`
-    /// coded frames arrived or the capture deadline passed.
+    /// Ask the service for its display ids and return the one the request names,
+    /// or the typed absence. Read-only: nothing is created or changed.
+    fn locate(
+        service: &Strong,
+        callback: &Strong,
+        request: &Request,
+        outcome: &mut Outcome,
+    ) -> Result<i32, Error> {
+        let mut parcel = Parcel::prepare(service, "prepare_list_displays")?;
+        // The list request has no Binder field; `callback` is not written.
+        parcel.emit(&LIST_REQUEST, callback, None)?;
+        outcome.transactions.list += 1;
+        let mut reply = parcel.transact(service, LIST, "list_displays")?;
+        let listed = listed_displays(&mut reply)?;
+        outcome.displays_listed = Some(listed.len());
+        let id = wanted(request.target, &listed)?;
+        outcome.target_display_id = Some(id);
+        located(id, &listed)
+    }
+
+    /// Send the create request and drain mirrored frames until `frames` coded
+    /// frames arrived or the capture deadline passed.
     fn capture(
         request: Parcel,
         service: &Strong,
         input: &ConfiguredInput,
-        config: &Config,
+        frames: u32,
         collector: &mut Collector,
         outcome: &mut Outcome,
         encoder: &mut EncoderOutcome,
     ) -> Result<(), Error> {
+        outcome.transactions.create += 1;
         let mut reply = request.transact(service, CREATE, "create_display")?;
         let id = created_display(&mut reply)?;
         drop(reply);
         outcome.display_id = Some(id);
         outcome.display_created = true;
         let deadline = Instant::now() + CAPTURE;
-        while collector.stream.coded_frames() < config.frames && Instant::now() < deadline {
+        while collector.stream.coded_frames() < frames && Instant::now() < deadline {
             if collector.ended() {
                 return Err(Error::InvalidStream("unexpected_end_of_stream"));
             }
@@ -1042,8 +1405,10 @@ mod ffi {
 
     /// One mirror session. Order: function tables and classes, the process Binder
     /// pool (before any object of this process is handed out), a started encoder
-    /// fed no frames, the display service, the callback object, the request, then
-    /// the create transaction under the release guard.
+    /// fed no frames (a rejected format ends the session here, before the display
+    /// service is looked up), the display service, the callback object, the
+    /// display list (an absent target ends the session here, before a display is
+    /// asked for), the request, then the create transaction under the release guard.
     ///
     /// Locals drop in reverse order: the guard (which releases the display if that
     /// has not happened yet, including while unwinding), the callback reference,
@@ -1051,20 +1416,25 @@ mod ffi {
     /// first and codec second. Request and reply parcels are consumed or dropped
     /// before the capture loop starts; the libraries are never unloaded.
     pub(super) fn mirror(
-        config: &Config,
+        request: &Request,
         collector: &mut Collector,
         outcome: &mut Outcome,
     ) -> Result<(), Error> {
         let api = Api::global()?;
         let classes = Classes::global(api)?;
         pool::start(POOL_THREADS).map_err(pool_error)?;
-        let input = ConfiguredInput::new(config)?;
+        let input = ConfiguredInput::new(&request.config).map_err(rejected_format)?;
         outcome.codec_name = input.codec_name();
         let service = Strong::service(api, classes)?;
         let callbacks = Arc::new(Callbacks::default());
         let callback = Strong::local(api, classes, &callbacks)?;
-        let mut request = Parcel::prepare(&service, "prepare_create_display")?;
-        request.emit(&create_request(config), &callback, Some(&input))?;
+        let display_id = locate(&service, &callback, request, outcome)?;
+        let mut create = Parcel::prepare(&service, "prepare_create_display")?;
+        create.emit(
+            &create_request(request, display_id),
+            &callback,
+            Some(&input),
+        )?;
         let mut encoder = EncoderOutcome::default();
         let mut display = Display {
             service: &service,
@@ -1072,16 +1442,17 @@ mod ffi {
             armed: true,
         };
         let captured = capture(
-            request,
+            create,
             &service,
             &input,
-            config,
+            request.config.frames,
             collector,
             outcome,
             &mut encoder,
         );
         // The display is released before the encoder is told to finish, so the
         // compositor stops queueing into a surface that is about to end.
+        outcome.transactions.release += 1;
         let released = display.release();
         outcome.display_released = outcome.display_created && released.is_ok();
         outcome.release_error = released.err();
@@ -1103,7 +1474,7 @@ mod tests {
     #[test]
     fn create_request_is_exactly_the_pinned_field_sequence() {
         assert_eq!(
-            create_request(&PRESET),
+            create_request(&Request::DEFAULT, DEFAULT_DISPLAY),
             [
                 Field::I32(1),
                 Field::Str8(c"carlo-mirror"),
@@ -1132,11 +1503,17 @@ mod tests {
         assert_eq!(RELEASE_REQUEST, [Field::CallbackBinder]);
         assert_eq!((CREATE, RELEASE), (27, 30));
         // Only AUTO_MIRROR, whatever the encoder size.
-        let other = create_request(&Config {
-            width: 720,
-            height: 1280,
-            ..PRESET
-        });
+        let other = create_request(
+            &Request {
+                config: Config {
+                    width: 720,
+                    height: 1280,
+                    ..PRESET
+                },
+                ..Request::DEFAULT
+            },
+            DEFAULT_DISPLAY,
+        );
         assert_eq!(
             other[2..6],
             [
@@ -1145,6 +1522,216 @@ mod tests {
                 Field::I32(160),
                 Field::I32(16)
             ]
+        );
+        // The request only parameterises flags and the mirrored display, in place.
+        let secure = Request {
+            extra_flags: FLAG_SECURE,
+            ..Request::DEFAULT
+        };
+        let default = create_request(&Request::DEFAULT, DEFAULT_DISPLAY);
+        let varied = create_request(&secure, 6);
+        assert_eq!((varied[5], varied[9]), (Field::I32(20), Field::I32(6)));
+        for (index, (left, right)) in default.iter().zip(&varied).enumerate() {
+            assert_eq!(left == right, index != 5 && index != 9, "{index}");
+        }
+        assert_eq!(Request::DEFAULT.flags(), 16);
+        assert_eq!(Request::DEFAULT.config, PRESET);
+    }
+
+    #[test]
+    fn display_list_request_and_reply_follow_the_pinned_int_array_layout() {
+        assert_eq!(LIST_REQUEST, [Field::I32(0)]);
+        assert_eq!(LIST, 8);
+        let list = |values: &[i32]| listed_displays(&mut Fake::reply(0, values));
+        assert_eq!(list(&[0]), Ok(vec![]));
+        assert_eq!(list(&[1, 0]), Ok(vec![0]));
+        assert_eq!(list(&[2, 0, 6]), Ok(vec![0, 6]));
+        let mut full = vec![64];
+        full.extend(0..64);
+        assert_eq!(list(&full).map(|ids| ids.len()), Ok(64));
+        // A null array, a negative or an oversized count: no element is read.
+        for count in [-1, -2, i32::MIN, 65, i32::MAX] {
+            let mut reply = Fake::reply(0, &[count, 0, 6]);
+            assert_eq!(
+                listed_displays(&mut reply),
+                Err(Error::UnexpectedParcel("display_id_count"))
+            );
+            assert_eq!(reply.reads, ["list_displays", "read_display_count"]);
+        }
+        // Truncated: the count promises more ids than the reply holds.
+        assert_eq!(
+            list(&[2, 0]),
+            Err(Error::Parcel {
+                operation: "read_listed_display_id",
+                status: Fake::NOT_ENOUGH_DATA
+            })
+        );
+        assert_eq!(
+            list(&[]),
+            Err(Error::Parcel {
+                operation: "read_display_count",
+                status: Fake::NOT_ENOUGH_DATA
+            })
+        );
+        // Nothing behind an exception is read.
+        let mut denied = Fake::reply(-1, &[1, 0]);
+        assert_eq!(
+            listed_displays(&mut denied),
+            Err(Error::PermissionDenied("list_displays"))
+        );
+        assert_eq!(denied.reads, ["list_displays"]);
+    }
+
+    #[test]
+    fn absent_display_is_decided_from_the_listed_ids() {
+        assert_eq!(wanted(Target::Display(0), &[]), Ok(0));
+        assert_eq!(wanted(Target::Display(6), &[0]), Ok(6));
+        assert_eq!(located(0, &[0]), Ok(0));
+        assert_eq!(located(6, &[0, 6]), Ok(6));
+        for (id, listed) in [(0, &[][..]), (0, &[6][..]), (6, &[0][..]), (-1, &[0][..])] {
+            assert_eq!(located(id, listed), Err(Error::DisplayAbsent));
+        }
+        // The fault target is never one of the listed ids.
+        for listed in [&[][..], &[0][..], &[0, 6][..], &[6, 0, 1000][..], &[-5][..]] {
+            let id = wanted(Target::BeyondListed, listed).unwrap();
+            assert_eq!(located(id, listed), Err(Error::DisplayAbsent), "{id}");
+        }
+        assert_eq!(wanted(Target::BeyondListed, &[0, 6]), Ok(1006));
+        assert_eq!(wanted(Target::BeyondListed, &[]), Ok(1000));
+        assert_eq!(
+            wanted(Target::BeyondListed, &[0, i32::MAX - 999]),
+            Err(Error::LimitExceeded("display_id"))
+        );
+    }
+
+    /// Every error variant that is not one of the three classified sources.
+    fn unclassified() -> Vec<Error> {
+        vec![
+            Error::UnsupportedProfile,
+            Error::LibraryUnavailable("libbinder_ndk.so"),
+            Error::MissingSymbol("AIBinder_transact"),
+            Error::EncoderUnavailable,
+            Error::Codec {
+                operation: "configure",
+                status: -1010,
+            },
+            Error::Codec {
+                operation: "dequeue_output",
+                status: -1,
+            },
+            Error::Egl {
+                operation: "initialize",
+                code: 0x3001,
+            },
+            Error::Gl { code: 0x0501 },
+            Error::Timeout("end_of_stream"),
+            Error::InvalidStream("unexpected_end_of_stream"),
+            Error::LimitExceeded("reply_bytes"),
+            Error::Parcel {
+                operation: "read_display_id",
+                status: -61,
+            },
+            Error::UnexpectedParcel("display_id_count"),
+            Error::ServiceUnavailable("display"),
+            Error::BinderPool("unavailable_or_already_started"),
+            Error::Binder {
+                operation: "create_display",
+                status: -1,
+            },
+            Error::IllegalArgument("create_display"),
+            Error::RemoteException {
+                operation: "create_display",
+                code: -5,
+            },
+            Error::DisplayRefused,
+            Error::DefaultDisplayReturned,
+            Error::Runtime("status_returned_null"),
+        ]
+    }
+
+    #[test]
+    fn failure_classes_come_only_from_their_own_sources() {
+        // Permission: the SecurityException of a service reply.
+        let denied = created_display(&mut Fake::new(-1, 7)).unwrap_err();
+        assert_eq!(
+            FailureClass::of(&denied),
+            Some(FailureClass::PermissionDenied)
+        );
+        // Absent display: the lookup in the listed ids.
+        let absent = located(1006, &[0, 6]).unwrap_err();
+        assert_eq!(FailureClass::of(&absent), Some(FailureClass::DisplayAbsent));
+        // Format: the encoder calls that validate the configuration.
+        for operation in ["configure", "create_input_surface", "start"] {
+            let rejected = rejected_format(Error::Codec {
+                operation,
+                status: -1010,
+            });
+            assert_eq!(
+                rejected,
+                Error::UnsupportedFormat {
+                    operation,
+                    status: -1010
+                }
+            );
+            assert_eq!(
+                FailureClass::of(&rejected),
+                Some(FailureClass::UnsupportedFormat)
+            );
+        }
+        // No other error has a class, before or after the encoder mapping, and
+        // the mapping leaves every other error untouched.
+        for error in unclassified() {
+            assert_eq!(FailureClass::of(&error), None, "{error:?}");
+            let mapped = rejected_format(error.clone());
+            if !matches!(
+                error,
+                Error::Codec {
+                    operation: "configure",
+                    ..
+                }
+            ) {
+                assert_eq!(mapped, error);
+                assert_eq!(FailureClass::of(&mapped), None, "{error:?}");
+            }
+        }
+        // A null handle without a status is not a format rejection.
+        let null_window = Error::Codec {
+            operation: "create_input_surface",
+            status: 0,
+        };
+        assert_eq!(rejected_format(null_window.clone()), null_window);
+        // A silent -1 id stays a refusal, not a permission failure.
+        let refused = created_display(&mut Fake::new(0, -1)).unwrap_err();
+        assert_eq!(FailureClass::of(&refused), None);
+        let mut outcome = Outcome::default();
+        outcome.conclude(Err(Error::DisplayAbsent));
+        assert_eq!(outcome.failure_class, Some(FailureClass::DisplayAbsent));
+        outcome.conclude(Err(Error::DisplayRefused));
+        assert_eq!(outcome.failure_class, None);
+        outcome.conclude(Err(Error::PermissionDenied("create_display")));
+        outcome.conclude(Ok(()));
+        assert_eq!((&outcome.error, outcome.failure_class), (&None, None));
+        for (class, code) in [
+            (FailureClass::PermissionDenied, "permission_denied"),
+            (FailureClass::DisplayAbsent, "display_absent"),
+            (FailureClass::UnsupportedFormat, "unsupported_format"),
+        ] {
+            assert_eq!(serde_json::to_value(class).unwrap(), code);
+        }
+        assert_eq!(
+            serde_json::to_value(Error::DisplayAbsent).unwrap(),
+            serde_json::json!({"kind": "display_absent"})
+        );
+        assert_eq!(
+            serde_json::to_value(rejected_format(Error::Codec {
+                operation: "configure",
+                status: -1010
+            }))
+            .unwrap(),
+            serde_json::json!({
+                "kind": "unsupported_format",
+                "detail": {"operation": "configure", "status": -1010}
+            })
         );
     }
 
@@ -1181,15 +1768,22 @@ mod tests {
 
     struct Fake {
         exception: Result<i32, Error>,
-        id: i32,
+        values: std::collections::VecDeque<i32>,
         reads: Vec<&'static str>,
     }
 
     impl Fake {
+        /// `STATUS_NOT_ENOUGH_DATA`, as a real parcel answers past its end.
+        const NOT_ENOUGH_DATA: i32 = -61;
+
         fn new(exception: i32, id: i32) -> Self {
+            Self::reply(exception, &[id])
+        }
+
+        fn reply(exception: i32, values: &[i32]) -> Self {
             Self {
                 exception: Ok(exception),
-                id,
+                values: values.iter().copied().collect(),
                 reads: Vec::new(),
             }
         }
@@ -1203,7 +1797,10 @@ mod tests {
 
         fn int32(&mut self, operation: &'static str) -> Result<i32, Error> {
             self.reads.push(operation);
-            Ok(self.id)
+            self.values.pop_front().ok_or(Error::Parcel {
+                operation,
+                status: Self::NOT_ENOUGH_DATA,
+            })
         }
     }
 
@@ -1374,7 +1971,7 @@ mod tests {
             Diagnostics::collect().unwrap(),
             Some(FINGERPRINT.to_owned()),
             true,
-            |_, _| {
+            |_, _, _| {
                 called = true;
                 Ok(())
             },
@@ -1389,6 +1986,26 @@ mod tests {
         assert_eq!(report.outcome.error, Some(Error::UnsupportedProfile));
         assert!(!report.outcome.display_created && !report.outcome.display_released);
         assert!(report.take_data().is_none());
+
+        let mut calls = 0;
+        let faults = run_faults(
+            Diagnostics::collect().unwrap(),
+            Some(FINGERPRINT.to_owned()),
+            |_, _, _| {
+                calls += 1;
+                Ok(())
+            },
+        );
+        assert_eq!(calls, 0);
+        assert!(!faults.passed());
+        assert_eq!(faults.sessions.len(), 3);
+        for session in &faults.sessions {
+            assert_eq!(session.outcome.error, Some(Error::UnsupportedProfile));
+            assert_eq!(session.outcome.failure_class, None);
+            assert_eq!(session.outcome.transactions, Transactions::default());
+            assert!(!session.passed);
+        }
+        assert!(!collect_faults().unwrap().passed());
     }
 
     /// A report as the pinned profile would build it, without any platform call.
@@ -1396,10 +2013,12 @@ mod tests {
         keep_data: bool,
         session: impl FnOnce(&mut Collector, &mut Outcome) -> Result<(), Error>,
     ) -> Report {
-        let mut collector = Collector::new(&PRESET, keep_data);
-        let mut outcome = Outcome::default();
-        outcome.error = session(&mut collector, &mut outcome).err();
-        outcome.stream = collector.stream;
+        let (outcome, data) = attempt(
+            true,
+            &Request::DEFAULT,
+            keep_data,
+            |_, collector, outcome| session(collector, outcome),
+        );
         Report {
             schema_version: 1,
             environment: Diagnostics::collect().unwrap(),
@@ -1408,13 +2027,153 @@ mod tests {
             screen_capture: outcome.passed(),
             video_available: false,
             requested: PRESET,
-            display: DisplayRequest {
-                flags: FLAG_AUTO_MIRROR,
-                density_dpi: DENSITY_DPI,
-                display_id_to_mirror: DEFAULT_DISPLAY,
-            },
+            display: DisplayRequest::of(&Request::DEFAULT),
             outcome,
-            data: collector.data,
+            data,
+        }
+    }
+
+    /// What the pinned service and encoder are expected to answer to `request`,
+    /// through the same safe helpers the session uses.
+    fn provoked(request: &Request, outcome: &mut Outcome) -> Result<(), Error> {
+        if request.config.width == 0 {
+            return Err(rejected_format(Error::Codec {
+                operation: "configure",
+                status: -1010,
+            }));
+        }
+        outcome.transactions.list += 1;
+        let listed = listed_displays(&mut Fake::reply(0, &[2, 0, 6]))?;
+        outcome.displays_listed = Some(listed.len());
+        let id = wanted(request.target, &listed)?;
+        outcome.target_display_id = Some(id);
+        located(id, &listed)?;
+        outcome.transactions.create += 1;
+        let exception = if request.flags() & FLAG_SECURE != 0 {
+            -1
+        } else {
+            0
+        };
+        let created = created_display(&mut Fake::new(exception, 7));
+        outcome.transactions.release += 1;
+        outcome.display_id = Some(created?);
+        outcome.display_created = true;
+        outcome.display_released = true;
+        Ok(())
+    }
+
+    fn faults(
+        session: impl FnMut(&Request, &mut Collector, &mut Outcome) -> Result<(), Error>,
+    ) -> FaultReport {
+        fault_report(
+            true,
+            Diagnostics::collect().unwrap(),
+            Some(FINGERPRINT.to_owned()),
+            session,
+        )
+    }
+
+    #[test]
+    fn fault_probe_passes_only_on_the_three_expected_classes_and_no_display() {
+        // The requests: one extra flag, one derived target, one rejected size;
+        // none of them can capture frames.
+        assert_eq!(
+            FAULTS.map(|fault| (fault.name, fault.request.flags(), fault.request.target)),
+            [
+                ("permission", 16 | 4, Target::Display(0)),
+                ("display_absent", 16, Target::BeyondListed),
+                ("unsupported_format", 16, Target::Display(0)),
+            ]
+        );
+        assert!(FAULTS.iter().all(|fault| fault.request.config.frames == 0));
+        assert_eq!(FAULTS[0].request.config, FRAMELESS);
+        assert_eq!(
+            (
+                FAULTS[2].request.config.width,
+                FAULTS[2].request.config.height
+            ),
+            (0, 0)
+        );
+
+        let report = faults(|request, _, outcome| provoked(request, outcome));
+        assert!(report.passed());
+        let json = serde_json::to_value(&report).unwrap();
+        assert_eq!(json["source"], "display_fault_provocation");
+        assert_eq!(json["screen_capture"], false);
+        assert_eq!(json["video_available"], false);
+        let expected = [
+            ("permission", "permission_denied", [1, 1, 1], Some(2)),
+            ("display_absent", "display_absent", [1, 0, 0], Some(2)),
+            ("unsupported_format", "unsupported_format", [0, 0, 0], None),
+        ];
+        for (session, (name, class, sent, listed)) in
+            json["sessions"].as_array().unwrap().iter().zip(expected)
+        {
+            assert_eq!(session["name"], name);
+            assert_eq!(session["expected"], class);
+            assert_eq!(session["passed"], true);
+            assert_eq!(session["outcome"]["failure_class"], class);
+            assert_eq!(session["outcome"]["error"]["kind"], class);
+            assert_eq!(session["outcome"]["display_created"], false);
+            assert_eq!(session["outcome"]["display_id"], serde_json::Value::Null);
+            assert_eq!(
+                session["outcome"]["transactions"],
+                serde_json::json!({"list": sent[0], "create": sent[1], "release": sent[2]})
+            );
+            assert_eq!(
+                session["outcome"]["displays_listed"],
+                serde_json::json!(listed)
+            );
+        }
+        assert_eq!(json["sessions"][0]["display"]["flags"], 20);
+        assert_eq!(json["sessions"][1]["outcome"]["target_display_id"], 1006);
+        assert_eq!(
+            json["sessions"][1]["display"]["display_id_to_mirror"],
+            serde_json::Value::Null
+        );
+        assert_eq!(json["sessions"][2]["requested"]["width"], 0);
+
+        // The service unexpectedly accepting the secure display fails the probe,
+        // even though the session released it.
+        let accepted = faults(|request, _, outcome| {
+            let relaxed = Request {
+                extra_flags: 0,
+                ..*request
+            };
+            provoked(&relaxed, outcome)
+        });
+        assert!(!accepted.passed());
+        assert!(!accepted.sessions[0].passed);
+        assert!(accepted.sessions[0].outcome.display_created);
+        assert_eq!(accepted.sessions[0].outcome.error, None);
+        assert!(accepted.sessions[1].passed && accepted.sessions[2].passed);
+
+        // The right class with the wrong transactions, a different class, an
+        // unclassified error, no error or a failed release does not pass either.
+        type Breakage = fn(&Request, &mut Outcome) -> Result<(), Error>;
+        let breakages: [Breakage; 5] = [
+            |_, _| Ok(()),
+            |request, outcome| {
+                let result = provoked(request, outcome);
+                outcome.transactions.create += 1;
+                result
+            },
+            |_, _| Err(Error::PermissionDenied("list_displays")),
+            |request, outcome| {
+                let _ = provoked(request, outcome);
+                Err(Error::DisplayRefused)
+            },
+            |request, outcome| {
+                outcome.release_error = Some(Error::Binder {
+                    operation: "release_display",
+                    status: -32,
+                });
+                provoked(request, outcome)
+            },
+        ];
+        for (index, breakage) in breakages.into_iter().enumerate() {
+            let broken = faults(|request, _, outcome| breakage(request, outcome));
+            assert!(!broken.passed(), "{index} {:?}", broken.sessions);
         }
     }
 
@@ -1457,14 +2216,19 @@ mod tests {
                 "display_created",
                 "display_id",
                 "display_released",
+                "displays_listed",
                 "elapsed_ms",
                 "error",
+                "failure_class",
                 "output_height",
                 "output_width",
                 "release_error",
-                "stream"
+                "stream",
+                "target_display_id",
+                "transactions"
             ]
         );
+        assert_eq!(json["outcome"]["failure_class"], serde_json::Value::Null);
         assert_eq!(json["outcome"]["display_id"], 7);
         assert_eq!(
             json["outcome"]["callbacks"],
@@ -1498,6 +2262,7 @@ mod tests {
             json["outcome"]["error"],
             serde_json::json!({"kind": "permission_denied", "detail": "create_display"})
         );
+        assert_eq!(json["outcome"]["failure_class"], "permission_denied");
         assert_eq!(
             json["outcome"]["release_error"],
             serde_json::json!({
@@ -1511,6 +2276,7 @@ mod tests {
         ] {
             let json = serde_json::to_value(report(false, |_, _| Err(error))).unwrap();
             assert_eq!(json["outcome"]["error"]["kind"], kind);
+            assert_eq!(json["outcome"]["failure_class"], serde_json::Value::Null);
             assert_eq!(json["screen_capture"], false);
         }
     }

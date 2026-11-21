@@ -18,14 +18,17 @@ Commands:
   surface-parcel-probe  Flatten the frameless encoder input surface; report metadata (JSON)
   display-mirror-probe  Mirror the default display into the H.264 encoder (pinned build only; JSON)
   display-mirror-dump   Emit that mirrored H.264 Annex B stream as command data
+  display-fault-probe   Provoke the classified mirror failures (pinned build only; JSON)
   serve            Reserved for P3; currently returns unavailable (69)
   --version, -V    Show the package version
   --help, -h       Show this help
 
 Doctor checks the native foundation, not Binder or video compatibility.
 Video encode probes use generated frames only; they never capture a display.
-Display mirror commands send one private display-service transaction and are
+Display mirror commands send private display-service transactions and are
 refused outside the single pinned build; the dump contains screen contents.
+The fault probe provokes permission_denied, display_absent and unsupported_format
+in three isolated sessions and passes only if no display was created.
 The surface parcel stays in this process: nothing is transacted or mirrored.
 Exit codes: 0 success, 64 invalid arguments, 69 unavailable, 74 I/O or serialization.
 ";
@@ -66,6 +69,8 @@ pub enum Command {
         /// Write Annex B bytes instead of the JSON report.
         dump: bool,
     },
+    /// Provoke the three classified mirror failures on the pinned build; emit metadata.
+    DisplayFaultProbe,
     /// Reserved entry point for the future session protocol.
     Serve,
 }
@@ -115,6 +120,7 @@ pub fn parse(arguments: impl IntoIterator<Item = String>) -> Result<Command, Car
         (Some("surface-parcel-probe"), None) => Ok(Command::SurfaceParcelProbe),
         (Some("display-mirror-probe"), None) => Ok(Command::DisplayMirrorProbe { dump: false }),
         (Some("display-mirror-dump"), None) => Ok(Command::DisplayMirrorProbe { dump: true }),
+        (Some("display-fault-probe"), None) => Ok(Command::DisplayFaultProbe),
         (Some("serve"), None) => Ok(Command::Serve),
         _ => Err(CarloError::InvalidArguments(
             "unknown command or option; use --help",
@@ -139,6 +145,8 @@ mod tests {
             vec!["surface-parcel-probe", "--json"],
             vec!["display-mirror-probe", "--json"],
             vec!["display-mirror-dump", "--output"],
+            vec!["display-fault-probe", "--json"],
+            vec!["display-fault-probe", "--secure"],
             vec!["doctor", "--json", "extra"],
             vec!["--version", "doctor"],
         ] {
@@ -170,5 +178,10 @@ mod tests {
             Command::DisplayMirrorProbe { dump: true }
         );
         assert!(HELP.contains("display-mirror-probe") && HELP.contains("display-mirror-dump"));
+        assert_eq!(
+            parse(args(&["display-fault-probe"])).unwrap(),
+            Command::DisplayFaultProbe
+        );
+        assert!(HELP.contains("display-fault-probe"));
     }
 }

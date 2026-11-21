@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- Classify three display mirror failures apart from every other error, as
+  `failure_class` in the outcome: `permission_denied` (service
+  `SecurityException`), `display_absent` (target id missing from
+  `IDisplayManager.getDisplayIds`, transaction 8 on the pinned build; decided by
+  Carlo because the service would silently mirror the default display) and
+  `unsupported_format` (encoder rejects the configuration before the display
+  service is contacted). The mirror now lists displays before every create and
+  reports `displays_listed` and per-session transaction counts. Add
+  `display-fault-probe`, which provokes the three failures in isolated sessions
+  under the same exact-build gate and passes only if no display was created.
+  Executed on that build: each class was returned with the expected
+  transaction counts and no display was created (#29).
+- Give the fixture a striped visual marker and add `tools/smoke_display_mirror.py`,
+  which finds it in the decoded mirror stream and keeps statistics only. It ran on
+  the pinned build with `--allow-physical`; the fixture was uninstalled afterwards.
+- Record the runtime dependencies of the capture route in `docs/DEPENDENCIES.md`
+  (libraries, runtime-resolved symbols, service/transactions, permissions, host
+  tools) with a profile table: only the Samsung a16x API 36 arm64 build is
+  executed; the API 34 x86_64 reference emulator was not run and stays
+  unsupported (#28).
 - Add `display-mirror-probe`/`display-mirror-dump`: mirror the default display
   into the AMediaCodec H.264 encoder by sending one private
   `IDisplayManager.createVirtualDisplay` transaction (flags `AUTO_MIRROR` only)

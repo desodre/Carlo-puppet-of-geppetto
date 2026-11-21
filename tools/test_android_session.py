@@ -106,6 +106,7 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(BINARY_COMMANDS, {"video-encode-dump", "display-mirror-dump"})
         self.assertEqual(COMMANDS["display-mirror-probe"], ["display-mirror-probe"])
         self.assertEqual(COMMANDS["display-mirror-dump"], ["display-mirror-dump"])
+        self.assertEqual(COMMANDS["display-fault-probe"], ["display-fault-probe"])
         for command, path in [
             ("video-encode-dump", None),
             ("display-mirror-dump", None),

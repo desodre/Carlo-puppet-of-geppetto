@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "agent_version": "0.1.0",
+  "rustc": "rustc 1.96.0 (ac68faa20 2026-05-25)",
+  "ndk_version": "28.2.13676358",
+  "android_api": 29,
+  "reference_api": 34,
+  "artifacts": [
+    {
+      "target": "x86_64-linux-android",
+      "file": "x86_64-linux-android/carlo",
+      "sha256": "93f41bea6d92a752e3b7c377558b7d3921fa1589d668bb32abc373edba7611cf",
+      "bytes": 587240,
+      "needed": [
+        "libdl.so",
+        "libc.so"
+      ],
+      "load_alignments": [
+        16384,
+        16384,
+        16384,
+        16384
+      ]
+    },
+    {
+      "target": "aarch64-linux-android",
+      "file": "aarch64-linux-android/carlo",
+      "sha256": "66ccecc6ffb75d029dba1180028e0e9ad83b615ebe1dc5ae0ffe2f8b80a52d21",
+      "bytes": 602720,
+      "needed": [
+        "libdl.so",
+        "libc.so"
+      ],
+      "load_alignments": [
+        16384,
+        16384,
+        16384,
+        16384
+      ]
+    }
+  ]
+}

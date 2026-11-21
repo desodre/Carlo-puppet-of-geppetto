@@ -1,7 +1,8 @@
 //! Native Android agent foundations: command parsing, diagnostics and typed errors.
 //!
 //! Binder lookup and a synthetic H.264 encoder have probes. A display mirror proof
-//! exists for one pinned build only. Hierarchy, streaming and serve are not implemented.
+//! and its classified failures exist for one pinned build only. Hierarchy,
+//! streaming and serve are not implemented.
 
 mod accessibility;
 pub mod binder;
@@ -127,6 +128,18 @@ pub fn run(command: Command, output: &mut impl Write) -> Result<(), CarloError> 
             } else {
                 Err(CarloError::UnsupportedFeature(
                     "display mirror proof did not pass; see JSON report",
+                ))
+            }
+        }
+        Command::DisplayFaultProbe => {
+            let report = video::mirror::collect_faults()?;
+            serde_json::to_writer_pretty(&mut *output, &report)?;
+            writeln!(output).map_err(CarloError::output)?;
+            if report.passed() {
+                Ok(())
+            } else {
+                Err(CarloError::UnsupportedFeature(
+                    "display fault proof did not pass; see JSON report",
                 ))
             }
         }

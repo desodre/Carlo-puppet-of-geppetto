@@ -41,7 +41,9 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md), [PLANO.md](PLANO.md) and the relevant i
   is a local Binder, so the pool must run before a surface is handed out. Start the
   encoder before deleting it: an unstarted codec with an input surface leaks a thread.
 - `tools/fixture/` is the controlled app under test, never an agent/Java bridge.
-  Fixture smoke refuses physical devices/existing packages and uninstalls its APK.
+  Fixture smoke refuses physical devices/existing packages and uninstalls its APK;
+  `smoke_display_mirror.py --allow-physical` needs the owner's go-ahead for that run.
+  Its stripe marker is the content the mirror smoke must recognise.
 - Report unavailable features honestly; a successful doctor check is not Binder compatibility.
 - `src/protocol.rs` owns v1 framing only; `docs/protocol.md` is the contract.
   Validate the whole header before reading or allocating payload. Change the wire

@@ -115,6 +115,15 @@ pub(crate) enum Error {
         operation: &'static str,
         code: i32,
     },
+    /// The encoder refused the requested configuration in the named codec call,
+    /// before anything was asked of the display service.
+    UnsupportedFormat {
+        operation: &'static str,
+        status: i32,
+    },
+    /// The requested display id is not in the display service's own list; no
+    /// display was asked for.
+    DisplayAbsent,
     /// The display service answered with a negative display id (limit or refusal).
     DisplayRefused,
     /// The reply named the default display: the request was not read as pinned.

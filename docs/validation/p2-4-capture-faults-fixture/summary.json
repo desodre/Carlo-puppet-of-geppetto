@@ -1,0 +1,763 @@
+{
+  "date": "2026-11-21",
+  "profile": {
+    "android_api": 36,
+    "abi": "arm64-v8a",
+    "emulator": false,
+    "uid": 2000,
+    "selinux_context": "u:r:shell:s0"
+  },
+  "fault_probe": {
+    "exit_code": 0,
+    "cleanup_removed": true,
+    "report": {
+      "schema_version": 1,
+      "runtime_fingerprint": "samsung/a16xub/a16x:16/BP4A.251205.006/A166MUBSADZJA:user/release-keys",
+      "source": "display_fault_provocation",
+      "screen_capture": false,
+      "video_available": false,
+      "sessions": [
+        {
+          "name": "permission",
+          "expected": "permission_denied",
+          "expected_transactions": {
+            "list": 1,
+            "create": 1,
+            "release": 1
+          },
+          "requested": {
+            "width": 360,
+            "height": 640,
+            "frames_per_second": 15,
+            "bits_per_second": 1500000,
+            "key_frame_interval_seconds": 1,
+            "frames": 0
+          },
+          "display": {
+            "flags": 20,
+            "density_dpi": 160,
+            "display_id_to_mirror": 0
+          },
+          "passed": true,
+          "outcome": {
+            "display_created": false,
+            "display_id": null,
+            "display_released": false,
+            "displays_listed": 1,
+            "target_display_id": 0,
+            "transactions": {
+              "list": 1,
+              "create": 1,
+              "release": 1
+            },
+            "callbacks": {
+              "paused": 0,
+              "resumed": 0,
+              "stopped": 0,
+              "rejected": 0
+            },
+            "codec_name": "c2.exynos.h264.encoder",
+            "output_width": null,
+            "output_height": null,
+            "stream": {
+              "packets": 0,
+              "bytes": 0,
+              "config_packets": 0,
+              "key_frames": 0,
+              "end_of_stream": false,
+              "first_pts_us": null,
+              "last_pts_us": null,
+              "pts_non_decreasing": true,
+              "nal_units": {
+                "sps": 0,
+                "pps": 0,
+                "idr": 0,
+                "non_idr": 0,
+                "other": 0
+              }
+            },
+            "elapsed_ms": 202,
+            "error": {
+              "kind": "permission_denied",
+              "detail": "create_display"
+            },
+            "failure_class": "permission_denied",
+            "release_error": null
+          }
+        },
+        {
+          "name": "display_absent",
+          "expected": "display_absent",
+          "expected_transactions": {
+            "list": 1,
+            "create": 0,
+            "release": 0
+          },
+          "requested": {
+            "width": 360,
+            "height": 640,
+            "frames_per_second": 15,
+            "bits_per_second": 1500000,
+            "key_frame_interval_seconds": 1,
+            "frames": 0
+          },
+          "display": {
+            "flags": 16,
+            "density_dpi": 160,
+            "display_id_to_mirror": null
+          },
+          "passed": true,
+          "outcome": {
+            "display_created": false,
+            "display_id": null,
+            "display_released": false,
+            "displays_listed": 1,
+            "target_display_id": 1000,
+            "transactions": {
+              "list": 1,
+              "create": 0,
+              "release": 0
+            },
+            "callbacks": {
+              "paused": 0,
+              "resumed": 0,
+              "stopped": 0,
+              "rejected": 0
+            },
+            "codec_name": "c2.exynos.h264.encoder",
+            "output_width": null,
+            "output_height": null,
+            "stream": {
+              "packets": 0,
+              "bytes": 0,
+              "config_packets": 0,
+              "key_frames": 0,
+              "end_of_stream": false,
+              "first_pts_us": null,
+              "last_pts_us": null,
+              "pts_non_decreasing": true,
+              "nal_units": {
+                "sps": 0,
+                "pps": 0,
+                "idr": 0,
+                "non_idr": 0,
+                "other": 0
+              }
+            },
+            "elapsed_ms": 70,
+            "error": {
+              "kind": "display_absent"
+            },
+            "failure_class": "display_absent",
+            "release_error": null
+          }
+        },
+        {
+          "name": "unsupported_format",
+          "expected": "unsupported_format",
+          "expected_transactions": {
+            "list": 0,
+            "create": 0,
+            "release": 0
+          },
+          "requested": {
+            "width": 0,
+            "height": 0,
+            "frames_per_second": 15,
+            "bits_per_second": 1500000,
+            "key_frame_interval_seconds": 1,
+            "frames": 0
+          },
+          "display": {
+            "flags": 16,
+            "density_dpi": 160,
+            "display_id_to_mirror": 0
+          },
+          "passed": true,
+          "outcome": {
+            "display_created": false,
+            "display_id": null,
+            "display_released": false,
+            "displays_listed": null,
+            "target_display_id": null,
+            "transactions": {
+              "list": 0,
+              "create": 0,
+              "release": 0
+            },
+            "callbacks": {
+              "paused": 0,
+              "resumed": 0,
+              "stopped": 0,
+              "rejected": 0
+            },
+            "codec_name": null,
+            "output_width": null,
+            "output_height": null,
+            "stream": {
+              "packets": 0,
+              "bytes": 0,
+              "config_packets": 0,
+              "key_frames": 0,
+              "end_of_stream": false,
+              "first_pts_us": null,
+              "last_pts_us": null,
+              "pts_non_decreasing": true,
+              "nal_units": {
+                "sps": 0,
+                "pps": 0,
+                "idr": 0,
+                "non_idr": 0,
+                "other": 0
+              }
+            },
+            "elapsed_ms": 57,
+            "error": {
+              "kind": "unsupported_format",
+              "detail": {
+                "operation": "configure",
+                "status": -10000
+              }
+            },
+            "failure_class": "unsupported_format",
+            "release_error": null
+          }
+        }
+      ]
+    }
+  },
+  "mirror_probe_after_listing": {
+    "exit_code": 0,
+    "cleanup_removed": true,
+    "report": {
+      "schema_version": 1,
+      "runtime_fingerprint": "samsung/a16xub/a16x:16/BP4A.251205.006/A166MUBSADZJA:user/release-keys",
+      "source": "display_mirror",
+      "screen_capture": true,
+      "video_available": false,
+      "requested": {
+        "width": 360,
+        "height": 640,
+        "frames_per_second": 15,
+        "bits_per_second": 1500000,
+        "key_frame_interval_seconds": 1,
+        "frames": 30
+      },
+      "display": {
+        "flags": 16,
+        "density_dpi": 160,
+        "display_id_to_mirror": 0
+      },
+      "outcome": {
+        "display_created": true,
+        "display_id": 11,
+        "display_released": true,
+        "displays_listed": 1,
+        "target_display_id": 0,
+        "transactions": {
+          "list": 1,
+          "create": 1,
+          "release": 1
+        },
+        "callbacks": {
+          "paused": 0,
+          "resumed": 1,
+          "stopped": 1,
+          "rejected": 0
+        },
+        "codec_name": "c2.exynos.h264.encoder",
+        "output_width": 360,
+        "output_height": 640,
+        "stream": {
+          "packets": 12,
+          "bytes": 55061,
+          "config_packets": 1,
+          "key_frames": 1,
+          "end_of_stream": true,
+          "first_pts_us": 129522395875,
+          "last_pts_us": 129526682978,
+          "pts_non_decreasing": true,
+          "nal_units": {
+            "sps": 1,
+            "pps": 1,
+            "idr": 1,
+            "non_idr": 9,
+            "other": 0
+          }
+        },
+        "elapsed_ms": 5250,
+        "error": null,
+        "failure_class": null,
+        "release_error": null
+      }
+    }
+  },
+  "fixture_smoke": {
+    "source": "display_mirror",
+    "screen_capture": true,
+    "fixture_sha256": "8fcb5cf390f609bd3ac675b86de13a8c41927b01c1299a126a4ca33a3f529b3e",
+    "agent_manifest": {
+      "schema_version": 1,
+      "agent_version": "0.1.0",
+      "rustc": "rustc 1.96.0 (ac68faa20 2026-05-25)",
+      "ndk_version": "28.2.13676358",
+      "android_api": 29,
+      "reference_api": 34,
+      "artifacts": [
+        {
+          "target": "x86_64-linux-android",
+          "file": "x86_64-linux-android/carlo",
+          "sha256": "93f41bea6d92a752e3b7c377558b7d3921fa1589d668bb32abc373edba7611cf",
+          "bytes": 587240,
+          "needed": [
+            "libdl.so",
+            "libc.so"
+          ],
+          "load_alignments": [
+            16384,
+            16384,
+            16384,
+            16384
+          ]
+        },
+        {
+          "target": "aarch64-linux-android",
+          "file": "aarch64-linux-android/carlo",
+          "sha256": "66ccecc6ffb75d029dba1180028e0e9ad83b615ebe1dc5ae0ffe2f8b80a52d21",
+          "bytes": 602720,
+          "needed": [
+            "libdl.so",
+            "libc.so"
+          ],
+          "load_alignments": [
+            16384,
+            16384,
+            16384,
+            16384
+          ]
+        }
+      ]
+    },
+    "ui_contents_recorded": false,
+    "stream_and_pixels_deleted": true,
+    "emulator": false,
+    "android_api": 36,
+    "abi": "arm64-v8a",
+    "probe_report": {
+      "schema_version": 1,
+      "runtime_fingerprint": "samsung/a16xub/a16x:16/BP4A.251205.006/A166MUBSADZJA:user/release-keys",
+      "source": "display_mirror",
+      "screen_capture": true,
+      "video_available": false,
+      "requested": {
+        "width": 360,
+        "height": 640,
+        "frames_per_second": 15,
+        "bits_per_second": 1500000,
+        "key_frame_interval_seconds": 1,
+        "frames": 30
+      },
+      "display": {
+        "flags": 16,
+        "density_dpi": 160,
+        "display_id_to_mirror": 0
+      },
+      "outcome": {
+        "display_created": true,
+        "display_id": 15,
+        "display_released": true,
+        "displays_listed": 1,
+        "target_display_id": 0,
+        "transactions": {
+          "list": 1,
+          "create": 1,
+          "release": 1
+        },
+        "callbacks": {
+          "paused": 0,
+          "resumed": 1,
+          "stopped": 1,
+          "rejected": 0
+        },
+        "codec_name": "c2.exynos.h264.encoder",
+        "output_width": 360,
+        "output_height": 640,
+        "stream": {
+          "packets": 3,
+          "bytes": 5875,
+          "config_packets": 1,
+          "key_frames": 1,
+          "end_of_stream": true,
+          "first_pts_us": 129776214059,
+          "last_pts_us": 129776214059,
+          "pts_non_decreasing": true,
+          "nal_units": {
+            "sps": 1,
+            "pps": 1,
+            "idr": 1,
+            "non_idr": 0,
+            "other": 0
+          }
+        },
+        "elapsed_ms": 5264,
+        "error": null,
+        "failure_class": null,
+        "release_error": null
+      }
+    },
+    "dump": {
+      "stdout_bytes": 5875,
+      "cleanup_removed": true
+    },
+    "host_nal_units": {
+      "sps": 1,
+      "pps": 1,
+      "idr": 1,
+      "non_idr": 0,
+      "other": 0
+    },
+    "host_decode": {
+      "ffprobe": {
+        "codec_name": "h264",
+        "profile": "High",
+        "width": 360,
+        "height": 640,
+        "pix_fmt": "yuv420p",
+        "nb_read_frames": "1"
+      },
+      "frames": 1,
+      "frames_with_marker": 1,
+      "marker_found": true,
+      "marker": {
+        "left": 32,
+        "right": 328,
+        "stripe_width": 37.0,
+        "forward_band": {
+          "top": 28,
+          "bottom": 85
+        },
+        "reversed_band": {
+          "top": 100,
+          "bottom": 157
+        },
+        "stripe_mean_abs_error": {
+          "forward": [
+            0.7,
+            0.7,
+            0.3,
+            1.4,
+            1.0,
+            0.7,
+            0.7,
+            0.4
+          ],
+          "reversed": [
+            0.3,
+            0.7,
+            0.7,
+            1.0,
+            1.3,
+            0.4,
+            0.7,
+            0.7
+          ]
+        },
+        "max_stripe_error": 1.4
+      }
+    },
+    "fixture_removed": true
+  },
+  "leftover_virtual_displays_after_runs": 0,
+  "native_tests": [
+    {
+      "exit_code": 0,
+      "cleanup_removed": true,
+      "result": "test result: ok. 4 passed; 0 failed",
+      "carlo_display_fault_resource_cycles": {
+        "after": [
+          9,
+          9
+        ],
+        "after_idle": [
+          [
+            18,
+            15
+          ],
+          [
+            18,
+            15
+          ]
+        ],
+        "floor": [
+          18,
+          15
+        ]
+      },
+      "carlo_display_mirror_resource_cycles": {
+        "after": [
+          20,
+          17
+        ],
+        "after_idle": [
+          [
+            18,
+            17
+          ],
+          [
+            18,
+            17
+          ]
+        ],
+        "floor": [
+          18,
+          17
+        ]
+      },
+      "carlo_video_resource_cycles": {
+        "after_idle": [
+          [
+            18,
+            17
+          ],
+          [
+            18,
+            17
+          ]
+        ],
+        "after_rejected_format": [
+          28,
+          17
+        ],
+        "burst": [
+          [
+            20,
+            17
+          ],
+          [
+            22,
+            17
+          ],
+          [
+            24,
+            17
+          ],
+          [
+            26,
+            17
+          ],
+          [
+            28,
+            17
+          ]
+        ],
+        "floor": [
+          18,
+          17
+        ]
+      },
+      "carlo_surface_parcel_resource_cycles": {
+        "after_idle": [
+          [
+            18,
+            17
+          ],
+          [
+            18,
+            17
+          ]
+        ],
+        "burst": [
+          [
+            18,
+            17
+          ],
+          [
+            18,
+            17
+          ],
+          [
+            18,
+            17
+          ],
+          [
+            18,
+            17
+          ],
+          [
+            18,
+            17
+          ],
+          [
+            18,
+            17
+          ],
+          [
+            18,
+            17
+          ],
+          [
+            18,
+            17
+          ],
+          [
+            16,
+            17
+          ],
+          [
+            16,
+            17
+          ]
+        ],
+        "floor": [
+          18,
+          17
+        ]
+      }
+    },
+    {
+      "exit_code": 0,
+      "cleanup_removed": true,
+      "result": "test result: ok. 4 passed; 0 failed",
+      "carlo_display_fault_resource_cycles": {
+        "after": [
+          9,
+          9
+        ],
+        "after_idle": [
+          [
+            18,
+            15
+          ],
+          [
+            18,
+            15
+          ]
+        ],
+        "floor": [
+          18,
+          15
+        ]
+      },
+      "carlo_display_mirror_resource_cycles": {
+        "after": [
+          20,
+          17
+        ],
+        "after_idle": [
+          [
+            18,
+            17
+          ],
+          [
+            18,
+            17
+          ]
+        ],
+        "floor": [
+          18,
+          17
+        ]
+      },
+      "carlo_video_resource_cycles": {
+        "after_idle": [
+          [
+            18,
+            17
+          ],
+          [
+            18,
+            17
+          ]
+        ],
+        "after_rejected_format": [
+          28,
+          17
+        ],
+        "burst": [
+          [
+            20,
+            17
+          ],
+          [
+            22,
+            17
+          ],
+          [
+            24,
+            17
+          ],
+          [
+            26,
+            17
+          ],
+          [
+            28,
+            17
+          ]
+        ],
+        "floor": [
+          18,
+          17
+        ]
+      },
+      "carlo_surface_parcel_resource_cycles": {
+        "after_idle": [
+          [
+            18,
+            17
+          ],
+          [
+            18,
+            17
+          ]
+        ],
+        "burst": [
+          [
+            18,
+            17
+          ],
+          [
+            18,
+            17
+          ],
+          [
+            18,
+            17
+          ],
+          [
+            18,
+            17
+          ],
+          [
+            18,
+            17
+          ],
+          [
+            18,
+            17
+          ],
+          [
+            18,
+            17
+          ],
+          [
+            18,
+            17
+          ],
+          [
+            16,
+            17
+          ],
+          [
+            16,
+            17
+          ]
+        ],
+        "floor": [
+          18,
+          17
+        ]
+      }
+    }
+  ]
+}

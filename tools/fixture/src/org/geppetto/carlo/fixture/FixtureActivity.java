@@ -3,6 +3,7 @@ package org.geppetto.carlo.fixture;
 import android.app.Activity;
 import android.os.Bundle;
 import android.view.View;
+import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.Button;
@@ -14,7 +15,11 @@ public final class FixtureActivity extends Activity {
         super.onCreate(state);
         Button button = new Button(this);
         button.setText("Change Carlo fixture state");
+        // Marker for the display-capture smoke: a background, so no extra view or node.
+        button.setBackground(new MarkerDrawable());
         setContentView(button);
+        // Capture needs a lit display while this activity is shown.
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         View root = getWindow().getDecorView();
         root.setId(R.id.fixture_root);
         root.setAccessibilityDelegate(new View.AccessibilityDelegate() {
