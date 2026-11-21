@@ -1,0 +1,465 @@
+{
+  "schema_version": 1,
+  "purpose": "Private IDisplayManager transactions used by display-mirror-probe/display-mirror-dump to mirror the default display into the encoder input surface. Valid for this exact build only; this vendor shifts AOSP transaction codes, so no other build may reuse these ordinals.",
+  "execution": {
+    "executed_on_device": true,
+    "evidence": "docs/validation/p2-2-display-mirror.md",
+    "note": "Executed only on the pinned build. Not executed on the API 34 x86_64 reference emulator or any other profile."
+  },
+  "profile": {
+    "android_api": 36,
+    "abi": "arm64-v8a",
+    "architecture": "aarch64",
+    "uid": 2000,
+    "fingerprint": "samsung/a16xub/a16x:16/BP4A.251205.006/A166MUBSADZJA:user/release-keys"
+  },
+  "gate": "API 36 AND aarch64 AND effective uid 2000 AND exact ro.build.fingerprint; otherwise unsupported_profile and no library is opened and no Binder call is made.",
+  "evidence_sources": [
+    {
+      "file": "framework.jar",
+      "origin": "the profiled device",
+      "sha256": "65a982a9f223f49aea1a8ddaaa6dd90e97a73db2d5b84797b58f194949c18502",
+      "read": [
+        "android.hardware.display.IDisplayManager$Stub TRANSACTION_* constants",
+        "IDisplayManager$Stub$Proxy transact literals",
+        "android.hardware.display.VirtualDisplayConfig.writeToParcel",
+        "VirtualDisplayConfig.<init>(Parcel)"
+      ]
+    },
+    {
+      "file": "services.jar",
+      "origin": "the profiled device",
+      "sha256": "9c07fc89884e661fdf9438d40fcfe9625cb196e5920a184a46c04718d8522606",
+      "read": [
+        "com.android.server.display.DisplayManagerService createVirtualDisplayInternal checks",
+        "releaseVirtualDisplay handling",
+        "callback linkToDeath"
+      ]
+    }
+  ],
+  "aosp_reference": {
+    "tag": "android-16.0.0_r1",
+    "createVirtualDisplay": 21,
+    "releaseVirtualDisplay": 24,
+    "applicable": false,
+    "note": "NOT applicable to this build: the vendor inserts six methods before these, shifting both codes by +6. AOSP ordinals are never used as a fallback."
+  },
+  "service": {
+    "name": "display",
+    "descriptor": "android.hardware.display.IDisplayManager",
+    "lookup": "AServiceManager_checkService (non-blocking)"
+  },
+  "create_virtual_display": {
+    "transaction": 27,
+    "flags": 0,
+    "oneway": false,
+    "permission": "android.permission.CAPTURE_VIDEO_OUTPUT (held by shell) for AUTO_MIRROR without a MediaProjection",
+    "request_after_interface_token": [
+      {
+        "order": 1,
+        "wire": "i32",
+        "value": 1,
+        "meaning": "non-null VirtualDisplayConfig"
+      },
+      {
+        "order": 2,
+        "wire": "string8",
+        "value": "carlo-mirror",
+        "meaning": "name",
+        "encoding": "i32 UTF-8 byte length, bytes + NUL, zero-padded to 4 bytes; emitted as little-endian i32 words"
+      },
+      {
+        "order": 3,
+        "wire": "i32",
+        "value": "encoder width (360)",
+        "meaning": "width"
+      },
+      {
+        "order": 4,
+        "wire": "i32",
+        "value": "encoder height (640)",
+        "meaning": "height"
+      },
+      {
+        "order": 5,
+        "wire": "i32",
+        "value": 160,
+        "meaning": "densityDpi"
+      },
+      {
+        "order": 6,
+        "wire": "i32",
+        "value": 16,
+        "meaning": "flags = VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR only"
+      },
+      {
+        "order": 7,
+        "wire": "i32",
+        "value": 1,
+        "meaning": "non-null Surface"
+      },
+      {
+        "order": 8,
+        "wire": "surface",
+        "value": "ANativeWindow_writeToParcel(encoder input window)",
+        "meaning": "String16 name, i32 isSingleBuffered=0, 'bque' magic, producer Binder, control handle (docs/compat/surface-parcel.json)"
+      },
+      {
+        "order": 9,
+        "wire": "string8",
+        "value": null,
+        "meaning": "uniqueId = null (i32 -1)"
+      },
+      {
+        "order": 10,
+        "wire": "i32",
+        "value": 0,
+        "meaning": "displayIdToMirror = default display"
+      },
+      {
+        "order": 11,
+        "wire": "i32",
+        "value": 0,
+        "meaning": "windowManagerMirroringEnabled = false"
+      },
+      {
+        "order": 12,
+        "wire": "i32",
+        "value": 0,
+        "meaning": "displayCategories: empty ArraySet"
+      },
+      {
+        "order": 13,
+        "wire": "f32",
+        "value": 0.0,
+        "meaning": "requestedRefreshRate"
+      },
+      {
+        "order": 14,
+        "wire": "i32",
+        "value": 0,
+        "meaning": "isHomeSupported = false"
+      },
+      {
+        "order": 15,
+        "wire": "i32",
+        "value": -1,
+        "meaning": "null DisplayCutout"
+      },
+      {
+        "order": 16,
+        "wire": "i32",
+        "value": 0,
+        "meaning": "ignoreActivitySizeRestrictions = false"
+      },
+      {
+        "order": 17,
+        "wire": "f32",
+        "value": 0.0,
+        "meaning": "defaultBrightness"
+      },
+      {
+        "order": 18,
+        "wire": "f32",
+        "value": -1.0,
+        "meaning": "dimBrightness"
+      },
+      {
+        "order": 19,
+        "wire": "strong_binder",
+        "value": null,
+        "meaning": "brightnessListener = null"
+      },
+      {
+        "order": 20,
+        "wire": "strong_binder",
+        "value": "local IVirtualDisplayCallback",
+        "meaning": "callback; also the key of the display in the service"
+      },
+      {
+        "order": 21,
+        "wire": "strong_binder",
+        "value": null,
+        "meaning": "IMediaProjection = null"
+      },
+      {
+        "order": 22,
+        "wire": "string16",
+        "value": "com.android.shell",
+        "meaning": "packageName"
+      }
+    ],
+    "reply": [
+      "Java exception/status header (AParcel_readStatusHeader)",
+      "i32 displayId"
+    ],
+    "reply_handling": {
+      "SecurityException (-1)": "permission_denied",
+      "IllegalArgumentException (-3)": "illegal_argument",
+      "other exception code": "remote_exception with the numeric code; the message is never read out",
+      "displayId < 0": "display_refused (the service answers -1 silently on limits)",
+      "displayId == 0": "default_display_returned (request was not read as pinned); released immediately",
+      "displayId > 0": "created"
+    }
+  },
+  "release_virtual_display": {
+    "transaction": 30,
+    "flags": 0,
+    "oneway": false,
+    "permission": null,
+    "request_after_interface_token": [
+      {
+        "order": 1,
+        "wire": "strong_binder",
+        "value": "the same local IVirtualDisplayCallback"
+      }
+    ],
+    "reply": [
+      "Java exception/status header"
+    ],
+    "guard": "Owed from just before the create transaction is sent; sent exactly once on every exit path, including errors and unwinding. Releasing a callback the service does not know is a no-op."
+  },
+  "callback": {
+    "descriptor": "android.hardware.display.IVirtualDisplayCallback",
+    "oneway": true,
+    "expected_sender_uid": 1000,
+    "transactions": [
+      {
+        "transaction": 1,
+        "name": "onPaused",
+        "arguments": []
+      },
+      {
+        "transaction": 2,
+        "name": "onResumed",
+        "arguments": []
+      },
+      {
+        "transaction": 3,
+        "name": "onStopped",
+        "arguments": []
+      }
+    ],
+    "handling": "counted with atomics; other callers get STATUS_PERMISSION_DENIED (-1), other codes STATUS_UNKNOWN_TRANSACTION (-74); parcels are never read"
+  },
+  "server_facts": [
+    "The display is keyed by the callback Binder and the service links to its death: if the process dies the display is destroyed.",
+    "releaseVirtualDisplay has no permission check.",
+    "A malformed Surface is not rejected: the service silently reads whatever follows, so field order matters more than error handling."
+  ],
+  "process_requirements": {
+    "binder_thread_pool": "Started and owned by the executable before the transaction (crate::binder::pool), 4 kernel-spawned workers plus the startThreadPool worker. The encoder's graphic buffer producer is a local Binder, so system_server and SurfaceFlinger call into this process.",
+    "lifetime": "Function tables, Binder class metadata and the pool live for the process."
+  },
+  "limits": {
+    "capture_deadline_ms": 5000,
+    "end_of_stream_deadline_ms": 3000,
+    "max_reply_bytes": 65536,
+    "frames_requested": 30,
+    "packet_and_stream_bounds": "those of the synthetic encoder Collector"
+  },
+  "pass_condition": "display created (id > 0) AND released AND at least one coded frame AND SPS >= 1 AND PPS >= 1 AND IDR >= 1 AND no error",
+  "known_limits": [
+    "Secure windows (FLAG_SECURE, DRM) are composed blank.",
+    "No frames are produced while the screen is off; an idle screen may produce a single frame.",
+    "The 360x640 preset does not match the panel aspect ratio; the mirror is letterboxed by the compositor.",
+    "Native String8/String16/strong-Binder encodings and the interface-token header are assumed from AOSP libbinder; they were not read from this device's shared objects.",
+    "The synchronous transactions cannot be cancelled; the bounded host session is the backstop.",
+    "No streaming protocol: video_available stays false."
+  ],
+  "ffi_bindings": [
+    {
+      "symbol": "AServiceManager_checkService",
+      "library": "libbinder_ndk.so",
+      "introduced_api": 29,
+      "header": "platform: libs/binder/ndk/include_platform/android/binder_manager.h (not in the NDK sysroot)",
+      "rust_c_abi_signature": "unsafe extern C fn(*const c_char) -> *mut RawBinder",
+      "ownership": "Returns null or one strong reference, paired with AIBinder_decStrong."
+    },
+    {
+      "symbol": "AIBinder_decStrong",
+      "library": "libbinder_ndk.so",
+      "introduced_api": 29,
+      "header": "android/binder_ibinder.h",
+      "rust_c_abi_signature": "unsafe extern C fn(*mut RawBinder)"
+    },
+    {
+      "symbol": "AIBinder_Class_define",
+      "library": "libbinder_ndk.so",
+      "introduced_api": 29,
+      "header": "android/binder_ibinder.h",
+      "rust_c_abi_signature": "unsafe extern C fn(*const c_char, OnCreate, OnDestroy, OnTransact) -> *mut RawClass",
+      "ownership": "Class metadata is owned by libbinder_ndk for the process lifetime."
+    },
+    {
+      "symbol": "AIBinder_associateClass",
+      "library": "libbinder_ndk.so",
+      "introduced_api": 29,
+      "header": "android/binder_ibinder.h",
+      "rust_c_abi_signature": "unsafe extern C fn(*mut RawBinder, *const RawClass) -> bool"
+    },
+    {
+      "symbol": "AIBinder_new",
+      "library": "libbinder_ndk.so",
+      "introduced_api": 29,
+      "header": "android/binder_ibinder.h",
+      "rust_c_abi_signature": "unsafe extern C fn(*const RawClass, *mut c_void) -> *mut RawBinder",
+      "ownership": "Returns one strong reference; user data is a Box<Arc<Callbacks>> freed in onDestroy."
+    },
+    {
+      "symbol": "AIBinder_getUserData",
+      "library": "libbinder_ndk.so",
+      "introduced_api": 29,
+      "header": "android/binder_ibinder.h",
+      "rust_c_abi_signature": "unsafe extern C fn(*mut RawBinder) -> *mut c_void"
+    },
+    {
+      "symbol": "AIBinder_getCallingUid",
+      "library": "libbinder_ndk.so",
+      "introduced_api": 29,
+      "header": "android/binder_ibinder.h",
+      "rust_c_abi_signature": "unsafe extern C fn() -> u32"
+    },
+    {
+      "symbol": "AIBinder_prepareTransaction",
+      "library": "libbinder_ndk.so",
+      "introduced_api": 29,
+      "header": "android/binder_ibinder.h",
+      "rust_c_abi_signature": "unsafe extern C fn(*mut RawBinder, *mut *mut RawParcel) -> i32",
+      "ownership": "Returns one parcel holding the interface token, consumed by AIBinder_transact or AParcel_delete."
+    },
+    {
+      "symbol": "AIBinder_transact",
+      "library": "libbinder_ndk.so",
+      "introduced_api": 29,
+      "header": "android/binder_ibinder.h",
+      "rust_c_abi_signature": "unsafe extern C fn(*mut RawBinder, u32, *mut *mut RawParcel, *mut *mut RawParcel, u32) -> i32",
+      "ownership": "Consumes the request (also on error); a non-null reply is owned by the caller."
+    },
+    {
+      "symbol": "AParcel_delete",
+      "library": "libbinder_ndk.so",
+      "introduced_api": 29,
+      "header": "android/binder_parcel.h",
+      "rust_c_abi_signature": "unsafe extern C fn(*mut RawParcel)"
+    },
+    {
+      "symbol": "AParcel_getDataSize",
+      "library": "libbinder_ndk.so",
+      "introduced_api": 31,
+      "header": "android/binder_parcel.h",
+      "rust_c_abi_signature": "unsafe extern C fn(*const RawParcel) -> i32"
+    },
+    {
+      "symbol": "AParcel_writeInt32",
+      "library": "libbinder_ndk.so",
+      "introduced_api": 29,
+      "header": "android/binder_parcel.h",
+      "rust_c_abi_signature": "unsafe extern C fn(*mut RawParcel, i32) -> i32"
+    },
+    {
+      "symbol": "AParcel_writeFloat",
+      "library": "libbinder_ndk.so",
+      "introduced_api": 29,
+      "header": "android/binder_parcel.h",
+      "rust_c_abi_signature": "unsafe extern C fn(*mut RawParcel, f32) -> i32"
+    },
+    {
+      "symbol": "AParcel_writeString",
+      "library": "libbinder_ndk.so",
+      "introduced_api": 29,
+      "header": "android/binder_parcel.h",
+      "rust_c_abi_signature": "unsafe extern C fn(*mut RawParcel, *const c_char, i32) -> i32"
+    },
+    {
+      "symbol": "AParcel_writeStrongBinder",
+      "library": "libbinder_ndk.so",
+      "introduced_api": 29,
+      "header": "android/binder_parcel.h",
+      "rust_c_abi_signature": "unsafe extern C fn(*mut RawParcel, *mut RawBinder) -> i32",
+      "ownership": "The parcel takes its own reference; null is allowed."
+    },
+    {
+      "symbol": "AParcel_readInt32",
+      "library": "libbinder_ndk.so",
+      "introduced_api": 29,
+      "header": "android/binder_parcel.h",
+      "rust_c_abi_signature": "unsafe extern C fn(*const RawParcel, *mut i32) -> i32"
+    },
+    {
+      "symbol": "AParcel_readStatusHeader",
+      "library": "libbinder_ndk.so",
+      "introduced_api": 29,
+      "header": "android/binder_parcel.h",
+      "rust_c_abi_signature": "unsafe extern C fn(*const RawParcel, *mut *mut RawStatus) -> i32",
+      "ownership": "Returns one AStatus, paired with AStatus_delete."
+    },
+    {
+      "symbol": "AStatus_getExceptionCode",
+      "library": "libbinder_ndk.so",
+      "introduced_api": 29,
+      "header": "android/binder_status.h",
+      "rust_c_abi_signature": "unsafe extern C fn(*const RawStatus) -> i32"
+    },
+    {
+      "symbol": "AStatus_delete",
+      "library": "libbinder_ndk.so",
+      "introduced_api": 29,
+      "header": "android/binder_status.h",
+      "rust_c_abi_signature": "unsafe extern C fn(*mut RawStatus)"
+    },
+    {
+      "symbol": "ANativeWindow_writeToParcel",
+      "library": "libnativewindow.so",
+      "introduced_api": 34,
+      "header": "android/native_window_aidl.h",
+      "rust_c_abi_signature": "unsafe extern C fn(*mut Window, *mut RawParcel) -> i32",
+      "ownership": "Borrows the window; the parcel takes its own references to the Binder objects it stores."
+    },
+    {
+      "symbol": "ABinderProcess_setThreadPoolMaxThreadCount",
+      "library": "libbinder_ndk.so",
+      "introduced_api": 29,
+      "header": "platform: libs/binder/ndk/include_platform/android/binder_process.h (not in the NDK sysroot)",
+      "rust_c_abi_signature": "unsafe extern C fn(u32) -> bool"
+    },
+    {
+      "symbol": "ABinderProcess_isThreadPoolStarted",
+      "library": "libbinder_ndk.so",
+      "introduced_api": 34,
+      "header": "platform: libs/binder/ndk/include_platform/android/binder_process.h (not in the NDK sysroot)",
+      "rust_c_abi_signature": "unsafe extern C fn() -> bool"
+    },
+    {
+      "symbol": "ABinderProcess_startThreadPool",
+      "library": "libbinder_ndk.so",
+      "introduced_api": 29,
+      "header": "platform: libs/binder/ndk/include_platform/android/binder_process.h (not in the NDK sysroot)",
+      "rust_c_abi_signature": "unsafe extern C fn()"
+    }
+  ],
+  "ndk_headers": {
+    "ndk_version": "28.2.13676358",
+    "paths": [
+      "sysroot/usr/include/android/binder_ibinder.h",
+      "sysroot/usr/include/android/binder_parcel.h",
+      "sysroot/usr/include/android/binder_status.h",
+      "sysroot/usr/include/android/native_window_aidl.h"
+    ]
+  },
+  "report": {
+    "emits": [
+      "display id as an integer",
+      "callback counters",
+      "stream counters",
+      "codec name",
+      "numeric status/exception codes",
+      "ro.build.fingerprint"
+    ],
+    "never_emits": [
+      "exception messages",
+      "surface or display names",
+      "frame bytes (JSON report)"
+    ]
+  }
+}

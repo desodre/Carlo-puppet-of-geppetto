@@ -112,9 +112,11 @@ A sessão recusa aparelho físico por padrão, valida API/ABI/hash e executa em
 diretório exclusivo, removido ao terminar. `--allow-physical` exige autorização
 prévia para esse aparelho. Os comandos disponíveis são `doctor`, `version`,
 `binder-probe`, `accessibility-probe`, `accessibility-hold`, `node-query-probe`, `node-read-probe`,
-`video-encode-probe`, `video-encode-dump`, `video-tests` e `serve`; use
+`video-encode-probe`, `video-encode-dump`, `surface-parcel-probe`, `display-mirror-probe`,
+`display-mirror-dump`, `video-tests` e `serve`; use
 `--report` para salvar evidência JSON e `--timeout` para prazo limitado.
-Comandos de saída binária (`video-encode-dump`) exigem `--binary-output <arquivo>`.
+Comandos de saída binária (`video-encode-dump`, `display-mirror-dump`) exigem
+`--binary-output <arquivo>`.
 Smoke test em emulador já iniciado:
 
 ```sh
@@ -182,6 +184,26 @@ conteúdo é omitido (`extras_omitted=true`). Não há promessa de suporte a qua
 emite o H.264 Annex B em stdout. Os quadros são sintéticos: nenhum display é lido,
 `screen_capture` e `video_available` permanecem `false`. Disponível só no perfil
 executado (API 36 arm64, `shell`); os demais retornam `unsupported_profile`.
+
+`surface-parcel-probe` serializa a surface de entrada de um encoder iniciado e
+sem quadros com `ANativeWindow_writeToParcel` (NDK público, API 34+) em um parcel
+local e informa magic `bque` e presença do Binder produtor. Nada é transacionado,
+nenhum display é tocado e o nome da surface vira apenas seu comprimento. Contrato em
+[docs/compat/surface-parcel.json](docs/compat/surface-parcel.json); evidência em
+[docs/validation/p2-3-surface-parcel.md](docs/validation/p2-3-surface-parcel.md).
+
+`display-mirror-probe` espelha o display padrão no encoder H.264: envia uma única
+transação privada `IDisplayManager.createVirtualDisplay` (apenas a flag
+`AUTO_MIRROR`) com a surface de entrada do encoder, drena a saída com prazos
+limitados e libera o display, inclusive em erro. `display-mirror-dump` emite o
+H.264 Annex B em stdout — esse stream contém o conteúdo da tela. O contrato vale
+só para um build exato (Samsung a16x, API 36 arm64, `shell`, fingerprint em
+[docs/compat/samsung-a16x-api36-display.json](docs/compat/samsung-a16x-api36-display.json));
+qualquer outro perfil retorna `unsupported_profile` sem nenhuma chamada Binder.
+`screen_capture` só é `true` quando ao menos um quadro decodificável chegou e o
+display foi criado e liberado; `video_available` permanece `false`. Janelas
+seguras saem em branco e tela desligada não produz quadros. Executado nesse build; evidência em
+[docs/validation/p2-2-display-mirror.md](docs/validation/p2-2-display-mirror.md).
 
 ```sh
 python3 tools/build_accessibility_tests.py --target aarch64-linux-android

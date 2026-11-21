@@ -31,6 +31,15 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md), [PLANO.md](PLANO.md) and the relevant i
   P2 proves a real route. Add a profile to `EXECUTED_PROFILES` only after running it.
   The platform caches two ashmem FDs per codec session for about five seconds;
   resource tests assert the floor after an idle period, not after each cycle.
+- `src/video/mirror.rs` mirrors the real default display into the encoder with one
+  private `IDisplayManager` transaction. Vendors shift these codes: the contract in
+  `docs/compat/` is pinned from the device's own framework files and gated on the
+  exact fingerprint; never fall back to AOSP ordinals or widen the gate unrun.
+  The release guard must cover every exit. Dumps hold real screen contents: never
+  commit or keep them, and record only counters and statistics as evidence.
+- `src/binder/pool.rs` owns the single process Binder pool; the encoder's producer
+  is a local Binder, so the pool must run before a surface is handed out. Start the
+  encoder before deleting it: an unstarted codec with an input surface leaks a thread.
 - `tools/fixture/` is the controlled app under test, never an agent/Java bridge.
   Fixture smoke refuses physical devices/existing packages and uninstalls its APK.
 - Report unavailable features honestly; a successful doctor check is not Binder compatibility.

@@ -33,6 +33,19 @@ fn unavailable_serve_is_not_a_fake_running_agent() {
 }
 
 #[test]
+fn display_mirror_outside_the_pinned_profile_emits_no_stream_and_reports_no_capture() {
+    let dump = command(&["display-mirror-dump"]);
+    assert_eq!(dump.status.code(), Some(69));
+    assert!(dump.stdout.is_empty());
+    let probe = command(&["display-mirror-probe"]);
+    assert_eq!(probe.status.code(), Some(69));
+    let text = String::from_utf8(probe.stdout).unwrap();
+    assert!(text.contains("\"source\": \"display_mirror\""));
+    assert!(text.contains("\"screen_capture\": false"));
+    assert!(text.contains("\"kind\": \"unsupported_profile\""));
+}
+
+#[test]
 fn invalid_cli_has_stable_exit_code_without_echoing_caller_data() {
     let output = command(&["sensitive-value"]);
     assert_eq!(output.status.code(), Some(64));

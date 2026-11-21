@@ -1,0 +1,476 @@
+{
+  "date": "2026-11-21",
+  "profile": {
+    "android_api": 36,
+    "abi": "arm64-v8a",
+    "emulator": false,
+    "uid": 2000,
+    "selinux_context": "u:r:shell:s0"
+  },
+  "probe": {
+    "exit_code": 0,
+    "cleanup_removed": true,
+    "report": {
+      "schema_version": 1,
+      "runtime_fingerprint": "samsung/a16xub/a16x:16/BP4A.251205.006/A166MUBSADZJA:user/release-keys",
+      "source": "display_mirror",
+      "screen_capture": true,
+      "video_available": false,
+      "requested": {
+        "width": 360,
+        "height": 640,
+        "frames_per_second": 15,
+        "bits_per_second": 1500000,
+        "key_frame_interval_seconds": 1,
+        "frames": 30
+      },
+      "display": {
+        "flags": 16,
+        "density_dpi": 160,
+        "display_id_to_mirror": 0
+      },
+      "outcome": {
+        "display_created": true,
+        "display_id": 6,
+        "display_released": true,
+        "callbacks": {
+          "paused": 0,
+          "resumed": 1,
+          "stopped": 1,
+          "rejected": 0
+        },
+        "codec_name": "c2.exynos.h264.encoder",
+        "output_width": 360,
+        "output_height": 640,
+        "stream": {
+          "packets": 5,
+          "bytes": 52820,
+          "config_packets": 1,
+          "key_frames": 1,
+          "end_of_stream": true,
+          "first_pts_us": 127649587624,
+          "last_pts_us": 127652934638,
+          "pts_non_decreasing": true,
+          "nal_units": {
+            "sps": 1,
+            "pps": 1,
+            "idr": 1,
+            "non_idr": 2,
+            "other": 0
+          }
+        },
+        "elapsed_ms": 5348,
+        "error": null,
+        "release_error": null
+      }
+    }
+  },
+  "dump": {
+    "exit_code": 0,
+    "cleanup_removed": true,
+    "stdout_bytes": 45232,
+    "kept": false,
+    "host_decode": {
+      "tool": "ffprobe/ffmpeg signalstats",
+      "codec_name": "h264",
+      "profile": "High",
+      "width": 360,
+      "height": 640,
+      "pix_fmt": "yuv420p",
+      "frames": 3,
+      "luma_min": [
+        13,
+        13,
+        11
+      ],
+      "luma_avg": [
+        118.114,
+        118.115,
+        118.112
+      ],
+      "luma_max": [
+        243,
+        243,
+        246
+      ]
+    }
+  },
+  "leftover_virtual_displays_after_runs": 0,
+  "native_tests": [
+    {
+      "exit_code": 0,
+      "cleanup_removed": true,
+      "result": "test result: ok. 3 passed; 0 failed",
+      "carlo_display_mirror_resource_cycles": {
+        "after": [
+          12,
+          10
+        ],
+        "after_idle": [
+          [
+            18,
+            16
+          ],
+          [
+            18,
+            16
+          ]
+        ],
+        "floor": [
+          18,
+          16
+        ]
+      },
+      "carlo_video_resource_cycles": {
+        "after_idle": [
+          [
+            18,
+            16
+          ],
+          [
+            18,
+            16
+          ]
+        ],
+        "after_rejected_format": [
+          28,
+          16
+        ],
+        "burst": [
+          [
+            20,
+            16
+          ],
+          [
+            22,
+            16
+          ],
+          [
+            24,
+            16
+          ],
+          [
+            26,
+            16
+          ],
+          [
+            28,
+            16
+          ]
+        ],
+        "floor": [
+          18,
+          16
+        ]
+      },
+      "carlo_surface_parcel_resource_cycles": {
+        "after_idle": [
+          [
+            18,
+            16
+          ],
+          [
+            18,
+            16
+          ]
+        ],
+        "burst": [
+          [
+            18,
+            16
+          ],
+          [
+            18,
+            16
+          ],
+          [
+            18,
+            16
+          ],
+          [
+            18,
+            16
+          ],
+          [
+            18,
+            16
+          ],
+          [
+            18,
+            16
+          ],
+          [
+            18,
+            16
+          ],
+          [
+            18,
+            16
+          ],
+          [
+            16,
+            16
+          ],
+          [
+            16,
+            16
+          ]
+        ],
+        "floor": [
+          18,
+          16
+        ]
+      }
+    },
+    {
+      "exit_code": 0,
+      "cleanup_removed": true,
+      "result": "test result: ok. 3 passed; 0 failed",
+      "carlo_display_mirror_resource_cycles": {
+        "after": [
+          12,
+          10
+        ],
+        "after_idle": [
+          [
+            18,
+            16
+          ],
+          [
+            18,
+            16
+          ]
+        ],
+        "floor": [
+          18,
+          16
+        ]
+      },
+      "carlo_video_resource_cycles": {
+        "after_idle": [
+          [
+            18,
+            16
+          ],
+          [
+            18,
+            16
+          ]
+        ],
+        "after_rejected_format": [
+          28,
+          16
+        ],
+        "burst": [
+          [
+            20,
+            16
+          ],
+          [
+            22,
+            16
+          ],
+          [
+            24,
+            16
+          ],
+          [
+            26,
+            16
+          ],
+          [
+            28,
+            16
+          ]
+        ],
+        "floor": [
+          18,
+          16
+        ]
+      },
+      "carlo_surface_parcel_resource_cycles": {
+        "after_idle": [
+          [
+            18,
+            16
+          ],
+          [
+            18,
+            16
+          ]
+        ],
+        "burst": [
+          [
+            18,
+            16
+          ],
+          [
+            18,
+            16
+          ],
+          [
+            18,
+            16
+          ],
+          [
+            18,
+            16
+          ],
+          [
+            18,
+            16
+          ],
+          [
+            18,
+            16
+          ],
+          [
+            18,
+            16
+          ],
+          [
+            18,
+            16
+          ],
+          [
+            16,
+            16
+          ],
+          [
+            16,
+            16
+          ]
+        ],
+        "floor": [
+          18,
+          16
+        ]
+      }
+    },
+    {
+      "exit_code": 0,
+      "cleanup_removed": true,
+      "result": "test result: ok. 3 passed; 0 failed",
+      "carlo_display_mirror_resource_cycles": {
+        "after": [
+          12,
+          10
+        ],
+        "after_idle": [
+          [
+            18,
+            16
+          ],
+          [
+            18,
+            16
+          ]
+        ],
+        "floor": [
+          18,
+          16
+        ]
+      },
+      "carlo_video_resource_cycles": {
+        "after_idle": [
+          [
+            18,
+            16
+          ],
+          [
+            18,
+            16
+          ]
+        ],
+        "after_rejected_format": [
+          28,
+          16
+        ],
+        "burst": [
+          [
+            20,
+            16
+          ],
+          [
+            22,
+            16
+          ],
+          [
+            24,
+            16
+          ],
+          [
+            26,
+            16
+          ],
+          [
+            28,
+            16
+          ]
+        ],
+        "floor": [
+          18,
+          16
+        ]
+      },
+      "carlo_surface_parcel_resource_cycles": {
+        "after_idle": [
+          [
+            18,
+            16
+          ],
+          [
+            18,
+            16
+          ]
+        ],
+        "burst": [
+          [
+            18,
+            16
+          ],
+          [
+            18,
+            16
+          ],
+          [
+            18,
+            16
+          ],
+          [
+            18,
+            16
+          ],
+          [
+            18,
+            16
+          ],
+          [
+            18,
+            16
+          ],
+          [
+            18,
+            16
+          ],
+          [
+            18,
+            16
+          ],
+          [
+            16,
+            16
+          ],
+          [
+            16,
+            16
+          ]
+        ],
+        "floor": [
+          18,
+          16
+        ]
+      }
+    }
+  ]
+}

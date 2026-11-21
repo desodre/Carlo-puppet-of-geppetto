@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+- Add `display-mirror-probe`/`display-mirror-dump`: mirror the default display
+  into the AMediaCodec H.264 encoder by sending one private
+  `IDisplayManager.createVirtualDisplay` transaction (flags `AUTO_MIRROR` only)
+  with the encoder input surface, drain the output with bounded deadlines and
+  release the display under an RAII guard. Gated to one exact build
+  (`samsung/a16xub/a16x:16/BP4A.251205.006/A166MUBSADZJA`, API 36 arm64, `shell`):
+  any other profile reports `unsupported_profile` without a Binder call. Request
+  order, String8 packing and reply handling are host-tested. Executed on that
+  build: real display frames were encoded and decoded on the host. `video_available` stays
+  `false`. Contract in `docs/compat/samsung-a16x-api36-display.json` (#26, #27).
+- Move the process-owned Binder thread pool into `binder::pool`, shared by the
+  automation session (1 kernel-spawned worker, unchanged) and the mirror session
+  (4); a foreign or smaller pool is refused.
+
+- Add `surface-parcel-probe`: flatten the input surface of a started,
+  frameless encoder with the public `ANativeWindow_writeToParcel` into a local
+  scratch parcel and report, with bounded reads, the `bque` magic and whether the
+  producer Binder is present. Nothing is transacted, no display is touched and the
+  surface name is reduced to its length. Same executed-profile gate as the encoder
+  plus API 34; executed on API 36 arm64, where the producer is a local Binder (#27).
+  Contract pinned in `docs/compat/surface-parcel.json`.
+
 - Add `video-encode-probe`/`video-encode-dump`: H.264 from AMediaCodec with a
   Surface input fed by synthetic EGL/GLES frames, drained with bounded packet,
   stream and deadline limits. Public NDK exports are resolved at runtime. This is

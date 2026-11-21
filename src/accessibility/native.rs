@@ -67,9 +67,6 @@ struct Api {
     read_status: unsafe extern "C" fn(*const Parcel, *mut *mut Status) -> i32,
     exception: unsafe extern "C" fn(*const Status) -> i32,
     delete_status: unsafe extern "C" fn(*mut Status),
-    pool_max: unsafe extern "C" fn(u32) -> bool,
-    pool_started: unsafe extern "C" fn() -> bool,
-    pool_start: unsafe extern "C" fn(),
 }
 
 // SAFETY: this table has immutable C function pointers and an owned dlopen handle.
@@ -186,15 +183,6 @@ impl Api {
                 unsafe extern "C" fn(*const Status) -> i32
             ),
             delete_status: symbol!(c"AStatus_delete", unsafe extern "C" fn(*mut Status)),
-            pool_max: symbol!(
-                c"ABinderProcess_setThreadPoolMaxThreadCount",
-                unsafe extern "C" fn(u32) -> bool
-            ),
-            pool_started: symbol!(
-                c"ABinderProcess_isThreadPoolStarted",
-                unsafe extern "C" fn() -> bool
-            ),
-            pool_start: symbol!(c"ABinderProcess_startThreadPool", unsafe extern "C" fn()),
             _library: library,
         })
     }
@@ -574,20 +562,10 @@ fn local_binder(
         Err(Error::Runtime("new_binder_returned_null"))
     }
 }
-fn start_pool(api: &'static Api) -> Result<(), Error> {
-    static POOL: OnceLock<Result<(), Error>> = OnceLock::new();
-    POOL.get_or_init(|| {
-        // SAFETY: executable owns the process pool, configured once before callbacks.
-        // One kernel-spawned worker plus startThreadPool's worker; main never joins.
-        let ok = unsafe { !(api.pool_started)() && (api.pool_max)(1) };
-        if !ok {
-            return Err(Error::Runtime("pool_unavailable_or_already_started"));
-        }
-        // SAFETY: one-shot start after setting finite maximum, table/classes never unload.
-        unsafe { (api.pool_start)() };
-        Ok(())
-    })
-    .clone()
+/// One kernel-spawned worker plus startThreadPool's worker; main never joins.
+/// The pool itself is process-wide and shared (`crate::binder::pool`).
+fn start_pool() -> Result<(), Error> {
+    crate::binder::pool::start(1).map_err(|_| Error::Runtime("pool_unavailable_or_already_started"))
 }
 
 struct Session {
@@ -602,7 +580,7 @@ impl Session {
     fn open() -> Result<Self, Error> {
         let api = Api::global()?;
         let classes = Classes::global(api)?;
-        start_pool(api)?;
+        start_pool()?;
         // SAFETY: static terminated service name; returns null or one owned strong ref.
         let pointer = unsafe { (api.check)(c"accessibility".as_ptr()) };
         let manager = Strong::from_owned(api, pointer)

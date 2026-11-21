@@ -27,8 +27,9 @@ struct Codec {
 struct Format {
     _opaque: [u8; 0],
 }
+/// Opaque `ANativeWindow`; only ever handled by pointer.
 #[repr(C)]
-struct Window {
+pub(super) struct Window {
     _opaque: [u8; 0],
 }
 /// `AMediaCodecBufferInfo` from the pinned `NdkMediaCodec.h`.
@@ -557,6 +558,53 @@ impl Drop for InputWindow {
     }
 }
 
+/// A started encoder that is fed no frames, with its input window, for proofs that
+/// need the surface only. It must be started: on the executed profile a codec that
+/// is deleted after `createInputSurface` without `start` leaves one platform
+/// `C2NodeImpl` thread behind per session. Fields drop in order: window, then codec.
+pub(super) struct ConfiguredInput {
+    window: InputWindow,
+    encoder: Encoder,
+}
+
+impl ConfiguredInput {
+    pub(super) fn new(config: &Config) -> Result<Self, Error> {
+        let api = Api::global()?;
+        let mut encoder = Encoder::create(api)?;
+        encoder.configure(&MediaFormat::encoder(api, config)?)?;
+        let window = encoder.input_surface()?;
+        encoder.start()?;
+        Ok(Self { window, encoder })
+    }
+
+    pub(super) fn codec_name(&self) -> Option<String> {
+        self.encoder.name()
+    }
+
+    /// The input window, borrowed: valid while `self` lives and never released
+    /// by the caller.
+    pub(super) fn window(&self) -> NonNull<Window> {
+        self.window.raw
+    }
+
+    /// Move the currently available output into `collector`, waiting at most
+    /// `timeout_us` for the first buffer. Frames come from whoever queues to the
+    /// input window; this type never draws.
+    pub(super) fn drain(
+        &self,
+        timeout_us: i64,
+        collector: &mut Collector,
+        outcome: &mut Outcome,
+    ) -> Result<(), Error> {
+        self.encoder.drain(timeout_us, collector, outcome)
+    }
+
+    /// Ask the encoder to finish; end of stream then arrives through `drain`.
+    pub(super) fn end_input(&self) -> Result<(), Error> {
+        self.encoder.end_input()
+    }
+}
+
 /// Owns display initialization, one ES2 context and one window surface, current
 /// on the creating thread. `NonNull`/raw handles keep it `!Send`.
 struct Renderer<'a> {
@@ -760,11 +808,20 @@ mod tests {
     use super::*;
     use crate::video::PRESET;
 
+    /// Open descriptors and threads. Platform codec teardown is asynchronous, so
+    /// the lowest of a few spaced samples is used: a leak persists, a transient
+    /// descriptor does not.
     fn resources() -> (usize, usize) {
-        (
-            std::fs::read_dir("/proc/self/fd").unwrap().count(),
-            std::fs::read_dir("/proc/self/task").unwrap().count(),
-        )
+        (0..5)
+            .map(|_| {
+                std::thread::sleep(Duration::from_millis(100));
+                (
+                    std::fs::read_dir("/proc/self/fd").unwrap().count(),
+                    std::fs::read_dir("/proc/self/task").unwrap().count(),
+                )
+            })
+            .min()
+            .unwrap()
     }
 
     fn run(config: &Config) -> (Result<(), Error>, Collector, Outcome) {
@@ -855,6 +912,78 @@ mod tests {
             })
         );
         // Codec looper threads are transient; a per-session leak would exceed this slack.
+        for sample in burst.iter().chain(&recovered) {
+            assert!(sample.1 <= floor.1 + 4, "{floor:?} {burst:?} {recovered:?}");
+        }
+        for sample in recovered {
+            assert!(sample.0 <= floor.0, "{floor:?} {burst:?} {recovered:?}");
+        }
+    }
+
+    fn flattened() {
+        let outcome = crate::video::surface::probe();
+        assert!(outcome.passed(), "{outcome:?}");
+        assert!(outcome.magic_matches && outcome.producer_present);
+        assert_eq!(outcome.error, None);
+    }
+
+    /// One real create/mirror/release cycle through the command's own profile gate
+    /// and release guard. It must run before any other codec use of this process
+    /// (tests run in name order with `--test-threads=1`): the mirror path owns the
+    /// Binder thread pool and refuses one that already exists. Needs the screen on;
+    /// an idle screen may yield a single frame, which is enough. The pool workers
+    /// and lazily opened drivers it leaves are part of the floor measured after it.
+    #[test]
+    fn android_display_mirror_cycle_creates_releases_and_settles() {
+        let report = crate::video::mirror::collect(false).unwrap();
+        let outcome = report.outcome();
+        assert!(report.passed(), "{outcome:?}");
+        assert!(outcome.display_created && outcome.display_released);
+        assert_eq!(outcome.error, None, "{outcome:?}");
+        let after = resources();
+        let floor = settled();
+        let recovered = [settled(), settled()];
+        println!(
+            "CARLO_DISPLAY_MIRROR_RESOURCE_CYCLES {}",
+            serde_json::json!({"after": after, "floor": floor, "after_idle": recovered})
+        );
+        for sample in recovered {
+            assert!(sample.0 <= floor.0, "{after:?} {floor:?} {recovered:?}");
+            assert!(sample.1 <= floor.1 + 4, "{after:?} {floor:?} {recovered:?}");
+        }
+    }
+
+    /// Each cycle starts a codec session that encodes nothing, so the same cached
+    /// descriptor pair is tolerated per cycle; `settled` measures the floor with a
+    /// full encode, the activity known to evict that cache.
+    #[test]
+    fn android_surface_parcel_cycles_expose_producer_and_release_resources() {
+        const CYCLES: usize = 10;
+        let environment = crate::diagnostics::Diagnostics::collect().unwrap();
+        assert!(crate::video::executed(
+            environment.shell_api(),
+            std::env::consts::ARCH
+        ));
+        // Libraries, the Binder driver handle and service connections are lazy.
+        successful();
+        flattened();
+        flattened();
+        let floor = settled();
+        let mut burst = Vec::new();
+        for cycle in 1..=CYCLES {
+            flattened();
+            let sample = resources();
+            assert!(
+                sample.0 <= floor.0 + cycle * PLATFORM_CACHED_FDS_PER_SESSION,
+                "{floor:?} {burst:?} {sample:?}"
+            );
+            burst.push(sample);
+        }
+        let recovered = [settled(), settled()];
+        println!(
+            "CARLO_SURFACE_PARCEL_RESOURCE_CYCLES {}",
+            serde_json::json!({"floor": floor, "burst": burst, "after_idle": recovered})
+        );
         for sample in burst.iter().chain(&recovered) {
             assert!(sample.1 <= floor.1 + 4, "{floor:?} {burst:?} {recovered:?}");
         }

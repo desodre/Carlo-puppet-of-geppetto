@@ -131,12 +131,13 @@ fn collect_mode(hold_ms: u32, query: bool, emit_node: bool) -> Result<Report, Ca
 }
 
 #[cfg(not(target_os = "android"))]
-fn fingerprint() -> Result<Option<String>, CarloError> {
+pub(crate) fn fingerprint() -> Result<Option<String>, CarloError> {
     Ok(None)
 }
 
+/// `ro.build.fingerprint`, read from Bionic without any Binder call.
 #[cfg(target_os = "android")]
-fn fingerprint() -> Result<Option<String>, CarloError> {
+pub(crate) fn fingerprint() -> Result<Option<String>, CarloError> {
     use std::ffi::{CStr, c_char, c_void};
     #[repr(C)]
     struct PropInfo {

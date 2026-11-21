@@ -1,0 +1,197 @@
+{
+  "schema_version": 1,
+  "purpose": "Field order of a Surface flattened by the public ANativeWindow_writeToParcel, read back in-process by surface-parcel-probe. No private transaction is sent.",
+  "execution": {
+    "executed_on_device": true,
+    "profile": {
+      "android_api": 36,
+      "abi": "arm64-v8a",
+      "uid": 2000
+    },
+    "evidence": "docs/validation/p2-3-surface-parcel.md",
+    "note": "Gated to the encoder's executed profile and API >= 34. Not executed on the API 34 x86_64 reference emulator."
+  },
+  "minimum_api": 34,
+  "limits": {
+    "max_parcel_bytes": 4096,
+    "max_name_utf16_units": 256
+  },
+  "parcel_fields": [
+    {
+      "order": 1,
+      "name": "name",
+      "wire": "string16",
+      "reported_as": "name_units (length only; text is never emitted)"
+    },
+    {
+      "order": 2,
+      "name": "isSingleBuffered",
+      "wire": "i32",
+      "accepted": [
+        0,
+        1
+      ],
+      "reported_as": "single_buffered"
+    },
+    {
+      "order": 3,
+      "name": "magic",
+      "wire": "u32",
+      "value": "0x62717565",
+      "ascii": "bque",
+      "reported_as": "magic_matches"
+    },
+    {
+      "order": 4,
+      "name": "graphicBufferProducer",
+      "wire": "strong_binder",
+      "nullable": true,
+      "reported_as": "producer_present, producer_remote"
+    },
+    {
+      "order": 5,
+      "name": "surfaceControlHandle",
+      "wire": "nullable_strong_binder",
+      "nullable": true,
+      "reported_as": "control_handle_present"
+    }
+  ],
+  "pass_condition": "magic matches, producer Binder non-null and no error",
+  "ffi_bindings": [
+    {
+      "symbol": "ANativeWindow_writeToParcel",
+      "library": "libnativewindow.so",
+      "introduced_api": 34,
+      "header": "android/native_window_aidl.h",
+      "rust_c_abi_signature": "unsafe extern C fn(*mut Window, *mut RawParcel) -> i32",
+      "ownership": "Borrows the window and the parcel; the parcel takes its own references to the Binder objects it stores."
+    },
+    {
+      "symbol": "AParcel_create",
+      "library": "libbinder_ndk.so",
+      "introduced_api": 31,
+      "header": "android/binder_parcel.h",
+      "rust_c_abi_signature": "unsafe extern C fn() -> *mut RawParcel",
+      "ownership": "Returns one owned parcel, paired with AParcel_delete."
+    },
+    {
+      "symbol": "AParcel_delete",
+      "library": "libbinder_ndk.so",
+      "introduced_api": 29,
+      "header": "android/binder_parcel.h",
+      "rust_c_abi_signature": "unsafe extern C fn(*mut RawParcel)"
+    },
+    {
+      "symbol": "AParcel_getDataSize",
+      "library": "libbinder_ndk.so",
+      "introduced_api": 31,
+      "header": "android/binder_parcel.h",
+      "rust_c_abi_signature": "unsafe extern C fn(*const RawParcel) -> i32"
+    },
+    {
+      "symbol": "AParcel_getDataPosition",
+      "library": "libbinder_ndk.so",
+      "introduced_api": 29,
+      "header": "android/binder_parcel.h",
+      "rust_c_abi_signature": "unsafe extern C fn(*const RawParcel) -> i32"
+    },
+    {
+      "symbol": "AParcel_setDataPosition",
+      "library": "libbinder_ndk.so",
+      "introduced_api": 29,
+      "header": "android/binder_parcel.h",
+      "rust_c_abi_signature": "unsafe extern C fn(*const RawParcel, i32) -> i32"
+    },
+    {
+      "symbol": "AParcel_readString",
+      "library": "libbinder_ndk.so",
+      "introduced_api": 29,
+      "header": "android/binder_parcel.h",
+      "rust_c_abi_signature": "unsafe extern C fn(*const RawParcel, *mut c_void, unsafe extern C fn(*mut c_void, i32, *mut *mut c_char) -> bool) -> i32",
+      "ownership": "The allocator lends a bounded caller buffer for the UTF-8 copy or refuses; a null string calls it with length -1."
+    },
+    {
+      "symbol": "AParcel_readInt32",
+      "library": "libbinder_ndk.so",
+      "introduced_api": 29,
+      "header": "android/binder_parcel.h",
+      "rust_c_abi_signature": "unsafe extern C fn(*const RawParcel, *mut i32) -> i32"
+    },
+    {
+      "symbol": "AParcel_readUint32",
+      "library": "libbinder_ndk.so",
+      "introduced_api": 29,
+      "header": "android/binder_parcel.h",
+      "rust_c_abi_signature": "unsafe extern C fn(*const RawParcel, *mut u32) -> i32"
+    },
+    {
+      "symbol": "AParcel_readStrongBinder",
+      "library": "libbinder_ndk.so",
+      "introduced_api": 29,
+      "header": "android/binder_parcel.h",
+      "rust_c_abi_signature": "unsafe extern C fn(*const RawParcel, *mut *mut RawBinder) -> i32",
+      "ownership": "A non-null result transfers one strong reference, paired with AIBinder_decStrong."
+    },
+    {
+      "symbol": "AIBinder_isRemote",
+      "library": "libbinder_ndk.so",
+      "introduced_api": 29,
+      "header": "android/binder_ibinder.h",
+      "rust_c_abi_signature": "unsafe extern C fn(*const RawBinder) -> bool"
+    },
+    {
+      "symbol": "AIBinder_decStrong",
+      "library": "libbinder_ndk.so",
+      "introduced_api": 29,
+      "header": "android/binder_ibinder.h",
+      "rust_c_abi_signature": "unsafe extern C fn(*mut RawBinder)"
+    }
+  ],
+  "ndk_headers": {
+    "ndk_version": "28.2.13676358",
+    "paths": [
+      "sysroot/usr/include/android/native_window_aidl.h",
+      "sysroot/usr/include/android/binder_parcel.h",
+      "sysroot/usr/include/android/binder_ibinder.h"
+    ]
+  },
+  "hashes": "sha256 fields are intentionally omitted: the sources were not downloaded and hashed for this increment.",
+  "sources": [
+    {
+      "repository": "platform/frameworks/native",
+      "tag": "android-14.0.0_r1",
+      "path": "libs/gui/view/Surface.cpp",
+      "url": "https://android.googlesource.com/platform/frameworks/native/+/refs/tags/android-14.0.0_r1/libs/gui/view/Surface.cpp"
+    },
+    {
+      "repository": "platform/frameworks/native",
+      "tag": "android-14.0.0_r1",
+      "path": "libs/nativewindow/include/android/native_window_aidl.h",
+      "url": "https://android.googlesource.com/platform/frameworks/native/+/refs/tags/android-14.0.0_r1/libs/nativewindow/include/android/native_window_aidl.h"
+    },
+    {
+      "repository": "platform/frameworks/native",
+      "tag": "android-14.0.0_r1",
+      "path": "libs/nativewindow/libnativewindow.map.txt",
+      "url": "https://android.googlesource.com/platform/frameworks/native/+/refs/tags/android-14.0.0_r1/libs/nativewindow/libnativewindow.map.txt"
+    },
+    {
+      "repository": "platform/frameworks/native",
+      "tag": "android-16.0.0_r1",
+      "path": "libs/gui/view/Surface.cpp",
+      "url": "https://android.googlesource.com/platform/frameworks/native/+/refs/tags/android-16.0.0_r1/libs/gui/view/Surface.cpp"
+    },
+    {
+      "repository": "platform/frameworks/native",
+      "tag": "android-16.0.0_r1",
+      "path": "libs/nativewindow/include/android/native_window_aidl.h",
+      "url": "https://android.googlesource.com/platform/frameworks/native/+/refs/tags/android-16.0.0_r1/libs/nativewindow/include/android/native_window_aidl.h"
+    },
+    {
+      "repository": "platform/frameworks/native",
+      "tag": "android-16.0.0_r1",
+      "path": "libs/nativewindow/libnativewindow.map.txt",
+      "url": "https://android.googlesource.com/platform/frameworks/native/+/refs/tags/android-16.0.0_r1/libs/nativewindow/libnativewindow.map.txt"
+    }
+  ]
+}

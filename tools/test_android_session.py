@@ -8,7 +8,15 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from android_session import LAUNCH, Adb, SessionError, cleanup, run_session
+from android_session import (
+    BINARY_COMMANDS,
+    COMMANDS,
+    LAUNCH,
+    Adb,
+    SessionError,
+    cleanup,
+    run_session,
+)
 
 
 class FakeAdb:
@@ -95,7 +103,15 @@ class SessionTests(unittest.TestCase):
         self.assertNotIn("stdout", result)
         self.assertTrue(result["cleanup_removed"])
         json.dumps(result)
-        for command, path in [("video-encode-dump", None), ("doctor", output)]:
+        self.assertEqual(BINARY_COMMANDS, {"video-encode-dump", "display-mirror-dump"})
+        self.assertEqual(COMMANDS["display-mirror-probe"], ["display-mirror-probe"])
+        self.assertEqual(COMMANDS["display-mirror-dump"], ["display-mirror-dump"])
+        for command, path in [
+            ("video-encode-dump", None),
+            ("display-mirror-dump", None),
+            ("display-mirror-probe", output),
+            ("doctor", output),
+        ]:
             adb = FakeAdb()
             with self.assertRaises(SessionError):
                 run_session(adb, self.manifest, command, 1, False, path)

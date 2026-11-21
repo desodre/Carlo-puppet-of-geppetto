@@ -1,5 +1,6 @@
 //! Synthetic H.264 encoder proof (P2.1). Frames come from EGL/GLES clears, never
 //! from the screen: success here is not display capture and not a streaming API.
+//! The only path that reads a display is the profile-gated `mirror` module.
 //!
 //! Stream accounting and Annex B inspection are safe Rust, exercised on the host.
 
@@ -14,8 +15,10 @@
 use crate::{diagnostics::Diagnostics, error::CarloError};
 use serde::Serialize;
 
+pub(crate) mod mirror;
 #[cfg(target_os = "android")]
 mod native;
+pub(crate) mod surface;
 
 /// Per-packet bound from the plan's initial limits.
 const MAX_PACKET_BYTES: usize = 8 * 1024 * 1024;
@@ -87,6 +90,37 @@ pub(crate) enum Error {
     Timeout(&'static str),
     InvalidStream(&'static str),
     LimitExceeded(&'static str),
+    /// `binder_status_t` from a named NDK parcel or window-flattening call.
+    Parcel {
+        operation: &'static str,
+        status: i32,
+    },
+    /// A flattened surface field outside the pinned layout.
+    UnexpectedParcel(&'static str),
+    /// A named platform service was absent or its descriptor did not match.
+    ServiceUnavailable(&'static str),
+    /// The process Binder thread pool could not be owned by this executable.
+    BinderPool(&'static str),
+    /// `binder_status_t` from preparing or sending a named transaction.
+    Binder {
+        operation: &'static str,
+        status: i32,
+    },
+    /// The service threw `SecurityException` for the named transaction.
+    PermissionDenied(&'static str),
+    /// The service threw `IllegalArgumentException` for the named transaction.
+    IllegalArgument(&'static str),
+    /// Any other exception code in a reply header; its message is never read out.
+    RemoteException {
+        operation: &'static str,
+        code: i32,
+    },
+    /// The display service answered with a negative display id (limit or refusal).
+    DisplayRefused,
+    /// The reply named the default display: the request was not read as pinned.
+    DefaultDisplayReturned,
+    /// A fixed internal invariant failed (null handle, poisoned state).
+    Runtime(&'static str),
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize)]
