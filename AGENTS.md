@@ -34,6 +34,9 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md), [PLANO.md](PLANO.md) and the relevant i
 - `tools/fixture/` is the controlled app under test, never an agent/Java bridge.
   Fixture smoke refuses physical devices/existing packages and uninstalls its APK.
 - Report unavailable features honestly; a successful doctor check is not Binder compatibility.
+- `src/protocol.rs` owns v1 framing only; `docs/protocol.md` is the contract.
+  Validate the whole header before reading or allocating payload. Change the wire
+  format together with `tools/carlo_protocol.py` and the shared fixture vectors.
 - Stdout is command data; errors/diagnostics go to stderr. Never log UI contents or secrets.
 
 ## Workflow

@@ -1,0 +1,107 @@
+{
+  "description": "Protocol v1 framing vectors shared by src/protocol.rs and tools/carlo_protocol.py. Synthetic data only.",
+  "frames": [
+    {
+      "name": "control_ping",
+      "hex": "43524c4f0101000000000001000000127b22636f6d6d616e64223a2270696e67227d",
+      "kind": 1,
+      "request_id": 1,
+      "payload_hex": "7b22636f6d6d616e64223a2270696e67227d"
+    },
+    {
+      "name": "control_empty",
+      "hex": "43524c4f010100000000000000000000",
+      "kind": 1,
+      "request_id": 0,
+      "payload_hex": ""
+    },
+    {
+      "name": "hierarchy_unicode",
+      "hex": "43524c4f01020000deadbeef000000283c6e6f646520746578743d2261c3a7c3a36f20f09faab520266c743b26616d703b2667743b222f3e",
+      "kind": 2,
+      "request_id": 3735928559,
+      "payload_hex": "3c6e6f646520746578743d2261c3a7c3a36f20f09faab520266c743b26616d703b2667743b222f3e"
+    },
+    {
+      "name": "video_annexb_bytes",
+      "hex": "43524c4f0103000000000000000000070000000167ff00",
+      "kind": 3,
+      "request_id": 0,
+      "payload_hex": "0000000167ff00"
+    },
+    {
+      "name": "bad_magic",
+      "hex": "485454500101000000000001000000127b22636f6d6d616e64223a2270696e67227d",
+      "error": "bad_magic",
+      "recoverable": false,
+      "rejection": {
+        "request_id": 0,
+        "payload": "{\"error\":{\"code\":\"bad_magic\"}}"
+      }
+    },
+    {
+      "name": "unsupported_version",
+      "hex": "43524c4f020100000000000100000000",
+      "error": "unsupported_version",
+      "recoverable": false,
+      "rejection": {
+        "request_id": 0,
+        "payload": "{\"error\":{\"code\":\"unsupported_version\",\"supported_version\":1}}"
+      }
+    },
+    {
+      "name": "reserved_bits",
+      "hex": "43524c4f010100010000000100000000",
+      "error": "reserved_bits",
+      "recoverable": false,
+      "rejection": {
+        "request_id": 0,
+        "payload": "{\"error\":{\"code\":\"reserved_bits\"}}"
+      }
+    },
+    {
+      "name": "unknown_kind",
+      "hex": "43524c4f0109000000000005000000026162",
+      "error": "unknown_kind",
+      "recoverable": true,
+      "rejection": {
+        "request_id": 5,
+        "payload": "{\"error\":{\"code\":\"unknown_kind\"}}"
+      }
+    },
+    {
+      "name": "control_too_large",
+      "hex": "43524c4f010100000000000100010001",
+      "error": "frame_too_large",
+      "recoverable": false,
+      "rejection": {
+        "request_id": 0,
+        "payload": "{\"error\":{\"code\":\"frame_too_large\",\"limit\":65536}}"
+      }
+    },
+    {
+      "name": "length_max_u32",
+      "hex": "43524c4f0103000000000001ffffffff",
+      "error": "frame_too_large",
+      "recoverable": false,
+      "rejection": {
+        "request_id": 0,
+        "payload": "{\"error\":{\"code\":\"frame_too_large\",\"limit\":8388608}}"
+      }
+    },
+    {
+      "name": "truncated_header",
+      "hex": "43524c4f0101000000",
+      "error": "truncated_frame",
+      "recoverable": false,
+      "rejection": null
+    },
+    {
+      "name": "truncated_payload",
+      "hex": "43524c4f0101000000000001000000127b22636f6d6d616e64223a2270696e6722",
+      "error": "truncated_frame",
+      "recoverable": false,
+      "rejection": null
+    }
+  ]
+}
