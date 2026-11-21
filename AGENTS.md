@@ -25,6 +25,12 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md), [PLANO.md](PLANO.md) and the relevant i
   `node-query-probe` emits metadata; only `node-read-probe` emits decoded command data.
   Debug/diagnostics redact node contents. Each request owns isolated callback state
   and a deadline; the target app may call it directly (not only system UID).
+- `src/video/` is the synthetic encoder proof: AMediaCodec Surface input fed by
+  EGL/GLES clears, public NDK exports only, resolved at runtime and never unloaded.
+  It is not display capture; keep `screen_capture`/`video_available` false until
+  P2 proves a real route. Add a profile to `EXECUTED_PROFILES` only after running it.
+  The platform caches two ashmem FDs per codec session for about five seconds;
+  resource tests assert the floor after an idle period, not after each cycle.
 - `tools/fixture/` is the controlled app under test, never an agent/Java bridge.
   Fixture smoke refuses physical devices/existing packages and uninstalls its APK.
 - Report unavailable features honestly; a successful doctor check is not Binder compatibility.
@@ -54,6 +60,8 @@ For native changes run `python3 tools/build_android.py` with the pinned NDK and
 record API/ABI actually executed. For Binder use the bounded `binder-probe` session
 and `tools/binder_inventory.py`; never run platform calls on an unvalidated profile.
 Use a disposable emulator by default; respect existing physical-device authorization and never infer permission for an unrelated device.
+For video changes run `tools/smoke_video_encoder.py` with `--tests-manifest` on an
+executed profile and record codec, stream counts, host decode and resource samples.
 Build/run `tools/build_accessibility_tests.py` and `tools/smoke_accessibility.py`
 for session changes on the disposable reference emulator; record executed tests,
 resource cycles, conflict and signal/forced-death recovery.

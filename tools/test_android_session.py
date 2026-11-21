@@ -32,6 +32,8 @@ class FakeAdb:
         if args[:3] == ["sh", "-c", LAUNCH]:
             if self.failure:
                 raise self.failure
+            if kwargs.get("text") is False:
+                return subprocess.CompletedProcess(args, 0, b"\x00\x00\x01\xff", b"")
             return subprocess.CompletedProcess(args, 69, "", "unavailable")
         return subprocess.CompletedProcess(args, 0, "", "")
 
@@ -83,6 +85,21 @@ class SessionTests(unittest.TestCase):
         self.assertTrue(result["cleanup_removed"])
         launch = next(call for call in adb.calls if call[:3] == ["sh", "-c", LAUNCH])
         self.assertEqual(launch[-1], "binder-probe")
+
+    def test_binary_stdout_goes_only_to_the_requested_file(self):
+        adb, output = FakeAdb(), Path(self.temp.name) / "out/stream.h264"
+        result = run_session(adb, self.manifest, "video-encode-dump", 1, False, output)
+        self.assertEqual(output.read_bytes(), b"\x00\x00\x01\xff")
+        self.assertEqual(result["stdout_bytes"], 4)
+        self.assertEqual(result["stdout_sha256"], hashlib.sha256(output.read_bytes()).hexdigest())
+        self.assertNotIn("stdout", result)
+        self.assertTrue(result["cleanup_removed"])
+        json.dumps(result)
+        for command, path in [("video-encode-dump", None), ("doctor", output)]:
+            adb = FakeAdb()
+            with self.assertRaises(SessionError):
+                run_session(adb, self.manifest, command, 1, False, path)
+            self.assertEqual(adb.calls, [])
 
     def test_timeout_and_push_failure_both_clean_owned_directory(self):
         adb = FakeAdb(failure=subprocess.TimeoutExpired("adb", 1))

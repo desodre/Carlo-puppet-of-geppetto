@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add `video-encode-probe`/`video-encode-dump`: H.264 from AMediaCodec with a
+  Surface input fed by synthetic EGL/GLES frames, drained with bounded packet,
+  stream and deadline limits. Public NDK exports are resolved at runtime. This is
+  not display capture; `h264_stream` stays unavailable. Executed on API 36 arm64
+  only; other profiles report `unsupported_profile` (#25).
+- Add binary stdout to the session helper, a `video-tests` harness filter, an
+  arm64 option for the native test build and `smoke_video_encoder.py`, which decodes
+  the stream on the host and checks the generated pattern and resource cycles.
+
 - Decode the pinned API 34 minimum AccessibilityNodeInfo layout with bounded safe
   Rust reads, Unicode, node/window IDs, children, bounds and boolean properties.
   Reject unknown masks, unsupported spans/layouts and Binder/FD-bearing parcels.

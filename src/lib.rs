@@ -1,13 +1,14 @@
 //! Native Android agent foundations: command parsing, diagnostics and typed errors.
 //!
-//! Binder lookup has an API 34 probe. Hierarchy, streaming and serve are not implemented.
+//! Binder lookup and a synthetic H.264 encoder have API 34 probes. Hierarchy, display
+//! capture, streaming and serve are not implemented.
 
 mod accessibility;
 pub mod binder;
 pub mod cli;
 pub mod diagnostics;
 pub mod error;
-pub mod protocol;
+mod video;
 
 use std::io::Write;
 
@@ -76,6 +77,25 @@ pub fn run(command: Command, output: &mut impl Write) -> Result<(), CarloError> 
             } else {
                 Err(CarloError::UnsupportedFeature(
                     "Binder probe did not pass; see JSON report",
+                ))
+            }
+        }
+        Command::VideoEncodeProbe { dump } => {
+            let mut report = video::collect(dump)?;
+            if dump {
+                // Stream bytes are the only stdout data; a failed probe emits none.
+                let data = report.take_data().ok_or(CarloError::UnsupportedFeature(
+                    "synthetic encoder proof did not pass; run video-encode-probe",
+                ))?;
+                return output.write_all(&data).map_err(CarloError::output);
+            }
+            serde_json::to_writer_pretty(&mut *output, &report)?;
+            writeln!(output).map_err(CarloError::output)?;
+            if report.passed() {
+                Ok(())
+            } else {
+                Err(CarloError::UnsupportedFeature(
+                    "synthetic encoder proof did not pass; see JSON report",
                 ))
             }
         }

@@ -13,11 +13,14 @@ Commands:
   node-query-probe  Decode active root; report metadata only (JSON)
   node-read-probe   Emit decoded root as command data (includes UI text)
   binder-probe     API 34 shell Binder/ServiceManager proof (JSON)
+  video-encode-probe  Encode synthetic GLES frames to H.264; report metadata (JSON)
+  video-encode-dump   Emit that synthetic H.264 Annex B stream as command data
   serve            Reserved for P3; currently returns unavailable (69)
   --version, -V    Show the package version
   --help, -h       Show this help
 
 Doctor checks the native foundation, not Binder or video compatibility.
+Video probes encode generated frames only; they never capture a display.
 Exit codes: 0 success, 64 invalid arguments, 69 unavailable, 74 I/O or serialization.
 ";
 
@@ -44,6 +47,11 @@ pub enum Command {
     NodeQueryProbe,
     /// Emit decoded root data on stdout, never in diagnostics.
     NodeReadProbe,
+    /// Encode synthetic frames; emit stream metadata, or the raw stream on stdout.
+    VideoEncodeProbe {
+        /// Write Annex B bytes instead of the JSON report.
+        dump: bool,
+    },
     /// Reserved entry point for the future session protocol.
     Serve,
 }
@@ -88,6 +96,8 @@ pub fn parse(arguments: impl IntoIterator<Item = String>) -> Result<Command, Car
         (Some("node-read-probe"), None) => Ok(Command::NodeReadProbe),
         (Some("node-query-probe"), None) => Ok(Command::NodeQueryProbe),
         (Some("binder-probe"), None) => Ok(Command::BinderProbe),
+        (Some("video-encode-probe"), None) => Ok(Command::VideoEncodeProbe { dump: false }),
+        (Some("video-encode-dump"), None) => Ok(Command::VideoEncodeProbe { dump: true }),
         (Some("serve"), None) => Ok(Command::Serve),
         _ => Err(CarloError::InvalidArguments(
             "unknown command or option; use --help",
@@ -108,6 +118,7 @@ mod tests {
         for values in [
             vec!["serve", "--json"],
             vec!["binder-probe", "--json"],
+            vec!["video-encode-dump", "--output"],
             vec!["doctor", "--json", "extra"],
             vec!["--version", "doctor"],
         ] {

@@ -1,0 +1,230 @@
+{
+  "emulator": false,
+  "android_api": 36,
+  "abi": "arm64-v8a",
+  "source": "synthetic_egl_gles",
+  "screen_capture": false,
+  "agent_manifest": {
+    "schema_version": 1,
+    "agent_version": "0.1.0",
+    "rustc": "rustc 1.96.0 (ac68faa20 2026-05-25)",
+    "ndk_version": "28.2.13676358",
+    "android_api": 29,
+    "reference_api": 34,
+    "artifacts": [
+      {
+        "target": "x86_64-linux-android",
+        "file": "x86_64-linux-android/carlo",
+        "sha256": "d3725aeda0de12f95bc34869a59c733f422724ddc6ef8a95189e7f0ab3badc5d",
+        "bytes": 565824,
+        "needed": [
+          "libdl.so",
+          "libc.so"
+        ],
+        "load_alignments": [
+          16384,
+          16384,
+          16384,
+          16384
+        ]
+      },
+      {
+        "target": "aarch64-linux-android",
+        "file": "aarch64-linux-android/carlo",
+        "sha256": "3e5805de086d18aa49ccc62065bcc2cf2638c20ebed02a44033ba00cde70ca6c",
+        "bytes": 550128,
+        "needed": [
+          "libdl.so",
+          "libc.so"
+        ],
+        "load_alignments": [
+          16384,
+          16384,
+          16384,
+          16384
+        ]
+      }
+    ]
+  },
+  "probe_report": {
+    "schema_version": 1,
+    "environment": {
+      "schema_version": 1,
+      "agent_version": "0.1.0",
+      "platform": "android",
+      "architecture": "aarch64",
+      "android_api": 36,
+      "device_abi": "arm64-v8a",
+      "effective_uid": 2000,
+      "selinux_context": "u:r:shell:s0",
+      "foundation_ready": true,
+      "checks": [
+        {
+          "name": "platform",
+          "status": "ok",
+          "detail": "Android runtime"
+        },
+        {
+          "name": "android_api",
+          "status": "ok",
+          "detail": "API meets the candidate native build floor (29)"
+        },
+        {
+          "name": "architecture",
+          "status": "ok",
+          "detail": "initial native build target"
+        },
+        {
+          "name": "identity",
+          "status": "ok",
+          "detail": "running as shell"
+        },
+        {
+          "name": "selinux_context",
+          "status": "ok",
+          "detail": "process context available; no policy changes made"
+        }
+      ],
+      "capabilities": [
+        {
+          "name": "binder_hierarchy",
+          "available": false,
+          "reason": "not implemented; P1/P4"
+        },
+        {
+          "name": "display_capture",
+          "available": false,
+          "reason": "not implemented; P2/P6"
+        },
+        {
+          "name": "h264_stream",
+          "available": false,
+          "reason": "not implemented; P2/P5"
+        },
+        {
+          "name": "serve_protocol",
+          "available": false,
+          "reason": "not implemented; P3"
+        }
+      ]
+    },
+    "source": "synthetic_egl_gles",
+    "screen_capture": false,
+    "video_available": false,
+    "requested": {
+      "width": 360,
+      "height": 640,
+      "frames_per_second": 15,
+      "bits_per_second": 1500000,
+      "key_frame_interval_seconds": 1,
+      "frames": 30
+    },
+    "outcome": {
+      "codec_name": "c2.exynos.h264.encoder",
+      "output_width": 360,
+      "output_height": 640,
+      "frames_submitted": 30,
+      "stream": {
+        "packets": 32,
+        "bytes": 17543,
+        "config_packets": 1,
+        "key_frames": 2,
+        "end_of_stream": true,
+        "first_pts_us": 0,
+        "last_pts_us": 1933333,
+        "pts_non_decreasing": true,
+        "nal_units": {
+          "sps": 1,
+          "pps": 1,
+          "idr": 2,
+          "non_idr": 28,
+          "other": 0
+        }
+      },
+      "error": null
+    }
+  },
+  "probe_sessions": 4,
+  "dump": {
+    "stdout_bytes": 17543,
+    "stdout_sha256": "5632b2bbf056a76004bf5236eab448e9875eb9f93b27076f9ba183bb57aa4c51",
+    "cleanup_removed": true
+  },
+  "host_nal_units": {
+    "sps": 1,
+    "pps": 1,
+    "idr": 2,
+    "non_idr": 28,
+    "other": 0
+  },
+  "host_decode": {
+    "ffprobe": {
+      "codec_name": "h264",
+      "profile": "High",
+      "width": 360,
+      "height": 640,
+      "pix_fmt": "yuv420p",
+      "nb_read_frames": "30"
+    },
+    "frames_checked": [
+      {
+        "frame": 0,
+        "bar_left": 0
+      },
+      {
+        "frame": 15,
+        "bar_left": 157
+      },
+      {
+        "frame": 29,
+        "bar_left": 304
+      }
+    ],
+    "background_ramp": true
+  },
+  "native_tests": {
+    "passed": 1,
+    "fds_threads": {
+      "after_idle": [
+        [
+          18,
+          12
+        ],
+        [
+          18,
+          14
+        ]
+      ],
+      "after_rejected_format": [
+        28,
+        13
+      ],
+      "burst": [
+        [
+          20,
+          14
+        ],
+        [
+          22,
+          14
+        ],
+        [
+          24,
+          13
+        ],
+        [
+          26,
+          13
+        ],
+        [
+          28,
+          14
+        ]
+      ],
+      "floor": [
+        18,
+        12
+      ]
+    }
+  }
+}
