@@ -1,8 +1,13 @@
-"""Host codec and control client for Carlo protocol v1; mirrors src/protocol.rs.
+"""Host codec and channel clients for Carlo protocol v1; mirrors src/protocol.rs.
 
 Header (16 bytes, big-endian): magic `CRLO`, version, kind, two reserved zero
 bytes, request ID (u32) and payload length (u32). The header is validated before
 any payload byte is read.
+
+A video-kind payload starts with a 24-byte big-endian packet header: type (1
+config, 2 media, 3 end), flags (bit 0 key frame), two reserved zero bytes,
+stream generation (u32), PTS in microseconds (i64), width and height (u16 each)
+and four reserved zero bytes; the encoder bytes follow.
 """
 
 import json
@@ -16,6 +21,9 @@ HEADER = struct.Struct(">4sBBHII")
 CONTROL, HIERARCHY, VIDEO = 1, 2, 3
 BULK_LIMIT = 8 * 1024 * 1024
 LIMITS = {CONTROL: 64 * 1024, HIERARCHY: BULK_LIMIT, VIDEO: BULK_LIMIT}
+VIDEO_HEADER = struct.Struct(">BBHIqHHI")
+CONFIG, MEDIA, END = 1, 2, 3
+KEY_FRAME = 1
 
 
 class Frame(NamedTuple):
@@ -82,6 +90,92 @@ def read_frame(stream: BinaryIO) -> Frame | None:
             "unknown_kind", f"kind {kind}", recoverable=True, request_id=request_id
         )
     return Frame(kind, request_id, payload)
+
+
+class VideoPacket(NamedTuple):
+    type: int
+    key_frame: bool
+    generation: int
+    pts_us: int
+    width: int
+    height: int
+    data: bytes
+
+
+def decode_video_packet(payload: bytes) -> VideoPacket:
+    """Split and validate the payload of one video-kind frame."""
+    if len(payload) < VIDEO_HEADER.size:
+        raise ProtocolError("truncated_packet", f"{len(payload)} of {VIDEO_HEADER.size} bytes")
+    kind, flags, reserved, generation, pts_us, width, height, tail = VIDEO_HEADER.unpack_from(
+        payload
+    )
+    data = payload[VIDEO_HEADER.size:]
+    if kind not in (CONFIG, MEDIA, END):
+        raise ProtocolError("unknown_packet_type", f"type {kind}")
+    if flags & ~KEY_FRAME or reserved or tail:
+        raise ProtocolError("packet_reserved_bits", "reserved packet bits are not zero")
+    key_frame = bool(flags & KEY_FRAME)
+    if (
+        generation == 0
+        or (kind != MEDIA and (key_frame or pts_us != 0))
+        or (kind == END) != (not data)
+    ):
+        raise ProtocolError("invalid_packet", "fields contradict the packet type")
+    return VideoPacket(kind, key_frame, generation, pts_us, width, height, data)
+
+
+def encode_video_packet(packet: VideoPacket) -> bytes:
+    """The video-kind payload for `packet`; the inverse of `decode_video_packet`."""
+    flags = KEY_FRAME if packet.key_frame else 0
+    return VIDEO_HEADER.pack(
+        packet.type, flags, 0, packet.generation, packet.pts_us, packet.width, packet.height, 0
+    ) + packet.data
+
+
+class VideoChannel:
+    """The host end of the video channel: one attach request, then packets only.
+
+    After a successful attach the client must never write again: the agent
+    closes the channel on any byte it receives. Every wait is bounded by the
+    socket timeout.
+    """
+
+    def __init__(self, connection: socket.socket, timeout: float = 10):
+        connection.settimeout(timeout)
+        self.connection, self.reader = connection, connection.makefile("rb")
+
+    def attach(self, session: str, request_id: int = 1) -> dict | None:
+        """Bind this connection to `session`; the agent's answer, None if it closed."""
+        message = {"command": "attach", "channel": "video", "session": session}
+        self.connection.sendall(encode(CONTROL, request_id, json.dumps(message).encode()))
+        try:
+            frame = read_frame(self.reader)
+        except ConnectionResetError:
+            return None
+        if frame is None:
+            return None
+        if frame.kind != CONTROL or frame.request_id != request_id:
+            raise ProtocolError("invalid_response", "attach answer is not the control response")
+        response = json.loads(frame.payload)
+        if not isinstance(response, dict):
+            raise ProtocolError("invalid_response", "attach answer is not an object")
+        return response
+
+    def receive(self) -> tuple[int, VideoPacket] | None:
+        """One packet as (request ID of its video.start, packet); None once closed."""
+        try:
+            frame = read_frame(self.reader)
+        except ConnectionResetError:
+            return None
+        if frame is None:
+            return None
+        if frame.kind != VIDEO:
+            raise ProtocolError("unexpected_kind", f"kind {frame.kind} on the video channel")
+        return frame.request_id, decode_video_packet(frame.payload)
+
+    def close(self) -> None:
+        self.reader.close()
+        self.connection.close()
 
 
 class ControlClient:

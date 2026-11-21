@@ -2,6 +2,42 @@
 
 ## Unreleased
 
+- `serve` gains the video channel and stream control (#30, #35, #44, #46, #51).
+  After the control `hello` the same listener admits exactly one more
+  connection within 10 s: peer credentials first, then one
+  `{"command":"attach","channel":"video","session":…}` frame within 5 s
+  (constant-time comparison). A refused attempt closes only that connection;
+  three refusals or the deadline close the listener and leave the session
+  control-only. The socket path is now removed when the video channel attaches,
+  when its window ends or at exit, no longer right after the control accept.
+  New control commands: `channels`, `video.start` (display, maximum size, fps,
+  bitrate, encoder preference; only display 0 and the default encoder; answers
+  the accepted configuration, generation and codec name) and `video.stop`
+  (reason and counters). Video packets are kind-3 frames with a documented
+  24-byte header (type, key-frame flag, generation, PTS, dimensions): config
+  before media, first media a key frame, `end` closing each generation. Stable
+  error codes: `video_channel_absent`, `already_streaming`, `not_streaming`,
+  `unsupported_display`, `unsupported_encoder`, `unavailable` (with
+  `unsupported_profile`), `permission_denied`, `display_absent`,
+  `unsupported_format`, `display_refused`, `timeout`, `internal`. Control runs on
+  its own thread and never reads or writes the video socket; a packet write
+  that misses its 2 s deadline ends the stream and closes the video channel
+  only. Streaming works solely where the display-mirror profile gate passes
+  (one pinned build); everywhere else `video.start` answers `unavailable`.
+- The display mirror session is now one implementation driven through a
+  consumer trait: the bounded probes and their reports are unchanged, and the
+  stream uses the same request, release guard and drop order on a dedicated
+  thread.
+- Capabilities are computed: `serve_protocol` is available; `display_capture`
+  and `h264_stream` are available only on the pinned mirror build and `false`
+  with a reason on every other target; `binder_hierarchy` stays `false`.
+  `doctor` text output now prints `available`/`unavailable` per capability.
+- Tooling: `tools/carlo_protocol.py` decodes video packets and has a
+  `VideoChannel` reader; shared vectors in `tests/fixtures/video_packets.json`;
+  serve smoke helpers moved to `tools/serve_session.py`;
+  `tools/smoke_video_stream.py` proves both channels, two stream generations,
+  control responsiveness while streaming and a host decode. It passed three
+  consecutive runs on the pinned build (#30, #35, #44, #46, #51).
 - Implement `carlo serve --session-dir <dir>`: one control channel for exactly
   one client over `<dir>/control.sock` (#31, #32). The directory must be absolute,
   real, owned by the effective user and mode 0700; the socket is created 0600

@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Prove `carlo serve` on an authorized device: private socket, ADB exposure, handshake.
 
-Three fresh sessions: a complete one (hello, ping, capabilities, unknown frame
-kind, shutdown), one with a wrong session identifier and one with a bad magic.
+Three fresh sessions: a complete one (hello, ping, capabilities, the video
+commands without a video channel, unknown frame kind, shutdown), one with a
+wrong session identifier and one with a bad magic. The video channel itself is
+proven by `smoke_video_stream.py`.
 The agent chooses the transport and says so on its ready line: a socket file,
 exposed with `adb forward tcp:0 localfilesystem:<path>`, or (only when the
 platform denies creating that file) an abstract socket, exposed with
@@ -14,185 +16,52 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
-import select
-import socket
 import subprocess
-import time
 from pathlib import Path
 
-from android_session import (
-    LAUNCH, ROOT, Adb, SessionError, cleanup, create_directory, deploy, resolve_artifact,
-)
+from android_session import ROOT, Adb, SessionError, resolve_artifact
 from carlo_protocol import CONTROL, HEADER, MAGIC, VERSION, ControlClient, ProtocolError
+from serve_session import (
+    ExposureError, ServeSession, error_code, first_call, forward_target, parse_forward_port,
+    parse_ready, read_line, read_ready, require, sanitise, validate_hello,
+)
 
-SOCKET_NAME = "control.sock"
-READY_KEYS = {"ready", "schema_version", "protocol", "transport", "socket", "session"}
-ABSTRACT_NAME = re.compile(r"carlo-[0-9a-f]{32}")
-STDERR_TAIL = 400
-RESERVED = ("hierarchy.dump", "display.info", "video.start", "video.stop", "stats")
-LIMITS = {"control_bytes": 64 * 1024, "payload_bytes": 8 * 1024 * 1024}
+__all__ = [
+    "ExposureError", "forward_target", "parse_forward_port", "parse_ready", "read_line",
+    "read_ready", "sanitise", "validate_hello",
+]
 
-
-class ExposureError(SessionError):
-    """The forwarded port did not reach the agent's control socket."""
-
-    def __init__(self, reason: str):
-        super().__init__("adb forward did not reach the control socket: " + reason)
-        self.reason, self.transport = reason, None
-
-
-def read_line(stream, timeout: float, limit: int = 4096) -> bytes:
-    """Read one line from an unbuffered pipe within `timeout` and `limit` bytes."""
-    deadline, data, descriptor = time.monotonic() + timeout, bytearray(), stream.fileno()
-    while not data.endswith(b"\n"):
-        remaining = deadline - time.monotonic()
-        if remaining <= 0 or not select.select([descriptor], [], [], remaining)[0]:
-            raise SessionError("agent did not print its ready line in time")
-        # One byte at a time: nothing after the newline is consumed.
-        chunk = os.read(descriptor, 1)
-        if not chunk:
-            raise SessionError("agent exited before printing its ready line")
-        data += chunk
-        if len(data) > limit:
-            raise SessionError("ready line exceeds its size bound")
-    return bytes(data)
-
-
-def parse_ready(line: bytes, directory: str) -> dict:
-    """Validate the single ready line. The error text never contains the line."""
-    try:
-        ready = json.loads(line)
-    except ValueError:
-        raise SessionError("ready line is not JSON") from None
-    if not (
-        isinstance(ready, dict)
-        and set(ready) == READY_KEYS
-        and ready["ready"] is True
-        and ready["schema_version"] == 1
-        and ready["protocol"] == VERSION
-        and isinstance(ready["session"], str)
-        and re.fullmatch(r"[0-9a-f]{32}", ready["session"])
-        and isinstance(ready["socket"], str)
-        and (
-            ready["socket"] == f"{directory}/{SOCKET_NAME}"
-            if ready["transport"] == "filesystem"
-            # Strict: this name is placed on an adb command line.
-            else ready["transport"] == "abstract"
-            and ABSTRACT_NAME.fullmatch(ready["socket"]) is not None
-            and ready["socket"] != "carlo-" + ready["session"]
-        )
-    ):
-        raise SessionError("ready line does not match the serve contract")
-    return ready
-
-
-def forward_target(ready: dict) -> str:
-    """The adb forward remote spec for a ready line accepted by `parse_ready`."""
-    scheme = {"filesystem": "localfilesystem:", "abstract": "localabstract:"}
-    return scheme[ready["transport"]] + ready["socket"]
-
-
-def sanitise(stderr: bytes, secrets: tuple[str, ...] = ()) -> str:
-    """A bounded, printable tail of agent diagnostics with identifiers removed."""
-    text = stderr[-4 * STDERR_TAIL:].decode("ascii", errors="replace")
-    for secret in secrets:
-        text = text.replace(secret, "<redacted>")
-    text = re.sub(r"[0-9a-fA-F]{32,}", "<redacted>", text)
-    text = "".join(char if " " <= char <= "~" else " " for char in text)
-    return " ".join(text.split())[-STDERR_TAIL:]
-
-
-def read_ready(process, directory: str, timeout: float = 15) -> dict:
-    """Read and validate the ready line; a failure says how the agent ended."""
-    try:
-        return parse_ready(read_line(process.stdout, timeout), directory)
-    except SessionError as error:
-        try:
-            code = process.wait(timeout=5)
-            tail = sanitise(process.stderr.read(4096) or b"")
-            detail = f"agent exit code {code}; stderr: {tail or '<empty>'}"
-        except subprocess.TimeoutExpired:
-            detail = "agent still running"
-        raise SessionError(f"{error} ({detail})") from None
-
-
-def parse_forward_port(stdout: str) -> int:
-    """`adb forward tcp:0 ...` prints the port it allocated."""
-    if re.fullmatch(r"[1-9][0-9]{0,4}\n?", stdout) is None or int(stdout) > 65535:
-        raise SessionError("adb forward did not report an allocated TCP port")
-    return int(stdout)
-
-
-def require(condition: bool, message: str) -> None:
-    if not condition:
-        raise SessionError(message)
-
-
-def error_code(response: dict) -> str | None:
-    error = response.get("error")
-    return error.get("code") if response.get("ok") is False and isinstance(error, dict) else None
-
-
-def validate_hello(response: dict, api: int | None, abi: str | None) -> int:
-    """Check the hello response against what the device itself reports."""
-    device, capabilities = response.get("device"), response.get("capabilities")
-    require(
-        response.get("ok") is True
-        and response.get("protocol") == VERSION
-        and isinstance(response.get("agent"), dict)
-        and response["agent"].get("name") == "carlo"
-        and isinstance(response["agent"].get("version"), str)
-        and response.get("limits") == LIMITS,
-        "hello response lacks protocol, agent or limits",
-    )
-    require(
-        isinstance(device, dict)
-        and device.get("android_api") == api
-        and device.get("abi") == abi
-        and isinstance(device.get("architecture"), str),
-        "hello device fields disagree with the device properties",
-    )
-    require(
-        isinstance(capabilities, list)
-        and len(capabilities) >= 1
-        and all(
-            isinstance(entry, dict)
-            and isinstance(entry.get("name"), str)
-            and isinstance(entry.get("available"), bool)
-            and isinstance(entry.get("reason"), str)
-            for entry in capabilities
-        ),
-        "hello capabilities are not a list of name/available/reason",
-    )
-    return len(capabilities)
-
-
-def first_call(client: ControlClient, message: dict) -> dict:
-    """The first exchange also proves the forward reached the socket."""
-    try:
-        return client.call(message)
-    except ProtocolError as error:
-        if error.code != "closed":
-            raise
-        raise ExposureError("EOF") from None
-    except OSError as error:
-        raise ExposureError(type(error).__name__ + f" errno {error.errno}") from None
+RESERVED = ("hierarchy.dump", "display.info", "stats")
 
 
 def unknown_kind_frame(request_id: int) -> bytes:
     return HEADER.pack(MAGIC, VERSION, 200, 0, request_id, 5) + b"later"
 
 
-def exercise_complete(client, session, api, abi, socket_exists) -> dict:
-    """hello, ping, capabilities, recovery from an unknown kind, shutdown."""
+def exercise_complete(client, session, api, abi) -> dict:
+    """hello, ping, capabilities, video commands with no video channel, recovery, shutdown."""
     hello = first_call(client, {"command": "hello", "protocol": VERSION, "session": session})
     count = validate_hello(hello, api, abi)
-    # The agent removes the path as soon as it accepts its single client.
-    removed = not socket_exists()
-    require(removed, "socket path still present after the client was accepted")
+    available = {entry["name"] for entry in hello["capabilities"] if entry["available"]}
+    require("serve_protocol" in available, "serve_protocol is not reported available")
+    require("binder_hierarchy" not in available, "hierarchy is reported available")
     require(client.call({"command": "ping"}) == {"ok": True}, "ping failed")
+    # No video connection is opened in this session: the channel stays pending
+    # (until its deadline) and the video commands answer without one.
+    channels = client.call({"command": "channels"})
+    require(
+        channels.get("ok") is True and channels.get("video") in ("pending", "absent"),
+        "channels does not report a missing video channel",
+    )
+    require(
+        error_code(client.call({"command": "video.start"})) == "video_channel_absent",
+        "video.start without a video channel was not refused as video_channel_absent",
+    )
+    require(
+        error_code(client.call({"command": "video.stop"})) == "not_streaming",
+        "video.stop without a stream was not refused as not_streaming",
+    )
     listed = client.call({"command": "capabilities"})
     require(
         listed == {"ok": True, "capabilities": hello["capabilities"]},
@@ -222,8 +91,9 @@ def exercise_complete(client, session, api, abi, socket_exists) -> dict:
     return {
         "hello_ok": True,
         "capabilities": count,
-        "capabilities_available": sum(entry["available"] for entry in hello["capabilities"]),
-        "socket_removed_after_accept": removed,
+        "capabilities_available": len(available),
+        "serve_protocol_available": True,
+        "video_without_channel": "video_channel_absent",
         "reserved_unavailable": unavailable,
         "unknown_kind_recovered": True,
         "requests": client.next_id - 1,
@@ -267,75 +137,29 @@ CASES = {
 def serve_case(adb: Adb, binary: Path, device: dict, name: str) -> dict:
     """Run one case in a fresh private session; always remove the forward and directory."""
     exercise, clean_exit = CASES[name]
-    directory = create_directory(adb)
-    path = f"{directory}/{SOCKET_NAME}"
-    process = port = client = None
+    session = ServeSession(adb, binary)
     result = {"case": name, "forward_removed": None}
-
-    def path_test(flag: str) -> bool:
-        return adb.shell(["test", flag, path], check=False).returncode == 0
-
-    def socket_exists() -> bool:
-        return path_test("-e")
-
     try:
-        deploy(adb, binary, directory)
-        process = adb.popen(
-            ["sh", "-c", LAUNCH, "carlo-launch", directory, directory + "/carlo",
-             "serve", "--session-dir", directory]
-        )
-        ready = read_ready(process, directory)
-        session = ready["session"]
-        result["session_id_length"] = len(session)
-        result["transport"] = ready["transport"]
-        if ready["transport"] == "filesystem":
-            mode = adb.shell(["stat", "-c", "%a", path]).stdout.strip()
-            require(
-                mode == "600" and path_test("-S"), "control socket is not a 0600 socket file"
-            )
-            result["socket_mode"] = "600"
-        else:
-            # Abstract: no permission bits to check, and no file may exist.
-            require(not socket_exists(), "abstract transport left a socket file")
-            result["socket_mode"] = None
-        port = parse_forward_port(adb.run(["forward", "tcp:0", forward_target(ready)]).stdout)
-        try:
-            client = ControlClient(socket.create_connection(("127.0.0.1", port), timeout=10))
-        except OSError as error:
-            raise ExposureError(type(error).__name__ + f" errno {error.errno}") from None
-        result.update(
-            exercise(client, session, device["android_api"], device["abi"], socket_exists)
-        )
-        result["exit_code"] = process.wait(timeout=15)
-        stderr = process.stderr.read(4096)
-        require(session.encode() not in stderr, "session identifier reached stderr")
+        ready = session.start()
+        result.update(session.evidence)
+        client = session.track(ControlClient(session.connect()))
+        result.update(exercise(client, ready["session"], device["android_api"], device["abi"]))
+        result["exit_code"], stderr = session.finish()
         result["stderr_bytes"] = len(stderr)
         require(
             (result["exit_code"] == 0) == clean_exit,
             "agent exit code does not match the outcome of the session",
         )
-        result["socket_present_after_exit"] = socket_exists()
+        result["socket_present_after_exit"] = session.socket_exists()
         require(not result["socket_present_after_exit"], "socket path survived the agent")
     except ExposureError as error:
-        error.transport = result.get("transport")
+        error.transport = session.evidence.get("transport")
         raise
     finally:
-        if client is not None:
-            client.close()
         try:
-            if port is not None:
-                removed = adb.run(["forward", "--remove", f"tcp:{port}"], check=False)
-                result["forward_removed"] = removed.returncode == 0
+            session.close()
         finally:
-            try:
-                if process is not None:
-                    if process.poll() is None:
-                        process.kill()
-                    process.wait(timeout=10)
-                    process.stdout.close()
-                    process.stderr.close()
-            finally:
-                cleanup(adb, directory)
+            result["forward_removed"] = session.forward_removed
     result["cleanup_removed"] = True
     require(result["forward_removed"] is True, "adb forward was not removed")
     return result
@@ -370,8 +194,8 @@ def validate_summary(summary: dict) -> dict:
     require(
         complete.get("hello_ok") is True
         and complete.get("capabilities", 0) >= 1
-        and complete.get("capabilities_available") == 0
-        and complete.get("socket_removed_after_accept") is True
+        and complete.get("serve_protocol_available") is True
+        and complete.get("video_without_channel") == "video_channel_absent"
         and complete.get("reserved_unavailable") == len(RESERVED)
         and complete.get("unknown_kind_recovered") is True,
         "complete session lacks handshake or recovery evidence",

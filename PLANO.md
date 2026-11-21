@@ -9,8 +9,9 @@ isso não é captura de tela. Espelhamento do display real no encoder (#26/#27) 
 em um build Samsung API 36 arm64 por `IDisplayManager`; marcador da fixture reconhecido no vídeo e erros de captura separados (#28/#29) no mesmo build.
 O perfil de referência API 34 não foi executado para captura e segue não suportado.
 Framing do protocolo v1 (#33/#34) integrado; canal de controle com socket, credenciais do peer
-e handshake (#31/#32) tem prova no mesmo build Samsung por socket abstrato. Segundo canal,
-comandos de dados e hierarquia completa seguem pendentes.
+e handshake (#31/#32) tem prova no mesmo build Samsung por socket abstrato. Canal de vídeo vinculado à
+sessão, pacotes documentados e `video.start`/`video.stop` no display principal (#30, #35, #44, #46,
+#51) têm prova no mesmo build. Hierarquia completa, política de consumidor lento e rotação seguem pendentes.
 [Evidência P1.1](docs/validation/p1-1-binder.md) e
 [plano aplicado para sessão nativa](docs/plans/p1-accessibility-session.md).
 

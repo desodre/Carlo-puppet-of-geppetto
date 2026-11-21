@@ -1,0 +1,201 @@
+{
+  "date": "2026-11-21",
+  "stream_smoke_consecutive_passing_runs": 3,
+  "stream_smoke": {
+    "emulator": false,
+    "android_api": 36,
+    "abi": "arm64-v8a",
+    "source": "display_mirror",
+    "screen_capture": true,
+    "ui_contents_recorded": false,
+    "cases": [
+      {
+        "case": "stream",
+        "forward_removed": true,
+        "session_id_length": 32,
+        "transport": "abstract",
+        "socket_mode": null,
+        "accepted": {
+          "bitrate": 1500000,
+          "fps": 15,
+          "height": 640,
+          "key_frame_interval_seconds": 1,
+          "width": 360
+        },
+        "generations": [
+          {
+            "generation": 1,
+            "config_packets": 1,
+            "media_packets": 2,
+            "key_frames": 1,
+            "bytes": 31071,
+            "first_pts_us": 133426109767,
+            "last_pts_us": 133428752111,
+            "end_packet": true,
+            "codec": "c2.exynos.h264.encoder",
+            "pings": 30,
+            "ping_max_ms": 5.9
+          },
+          {
+            "generation": 2,
+            "config_packets": 1,
+            "media_packets": 5,
+            "key_frames": 1,
+            "bytes": 28450,
+            "first_pts_us": 133429443395,
+            "last_pts_us": 133430387924,
+            "end_packet": true,
+            "codec": "c2.exynos.h264.encoder",
+            "pings": 10,
+            "ping_max_ms": 5.2
+          }
+        ],
+        "host_decode": {
+          "codec_name": "h264",
+          "width": 360,
+          "height": 640,
+          "frames": 2
+        },
+        "stream_deleted": true,
+        "exit_code": 0,
+        "stderr_bytes": 0,
+        "socket_present_after_exit": false,
+        "forward_listed_after": false,
+        "directory_present_after": false,
+        "cleanup_removed": true
+      },
+      {
+        "case": "no_video_channel",
+        "forward_removed": true,
+        "session_id_length": 32,
+        "transport": "abstract",
+        "socket_mode": null,
+        "video_start": "video_channel_absent",
+        "exit_code": 0,
+        "stderr_bytes": 0,
+        "socket_present_after_exit": false,
+        "forward_listed_after": false,
+        "directory_present_after": false,
+        "cleanup_removed": true
+      },
+      {
+        "case": "wrong_session_attach",
+        "forward_removed": true,
+        "session_id_length": 32,
+        "transport": "abstract",
+        "socket_mode": null,
+        "rejected": "invalid_session",
+        "control_survived": true,
+        "video_start": "video_channel_absent",
+        "exit_code": 0,
+        "stderr_bytes": 0,
+        "socket_present_after_exit": false,
+        "forward_listed_after": false,
+        "directory_present_after": false,
+        "cleanup_removed": true
+      }
+    ],
+    "agent_manifest": {
+      "schema_version": 1,
+      "agent_version": "0.1.0",
+      "rustc": "rustc 1.96.0 (ac68faa20 2026-05-25)",
+      "ndk_version": "28.2.13676358",
+      "android_api": 29,
+      "reference_api": 34,
+      "artifacts": [
+        {
+          "target": "x86_64-linux-android",
+          "file": "x86_64-linux-android/carlo",
+          "sha256": "f698615216a8b9874df50f5c993674d6f576411b98ea05d1ad962ef91f0d0abd",
+          "bytes": 903608,
+          "needed": [
+            "libdl.so",
+            "libc.so"
+          ],
+          "load_alignments": [
+            16384,
+            16384,
+            16384,
+            16384
+          ]
+        },
+        {
+          "target": "aarch64-linux-android",
+          "file": "aarch64-linux-android/carlo",
+          "sha256": "3e526f77823de505b508efca681b1f530c299d5b849f01dbf1ca1b2cc644623e",
+          "bytes": 891304,
+          "needed": [
+            "libdl.so",
+            "libc.so"
+          ],
+          "load_alignments": [
+            16384,
+            16384,
+            16384,
+            16384
+          ]
+        }
+      ]
+    }
+  },
+  "serve_smoke": {
+    "emulator": false,
+    "android_api": 36,
+    "abi": "arm64-v8a",
+    "transport": "abstract",
+    "filesystem_socket_exposed": false,
+    "cases": [
+      {
+        "case": "complete",
+        "forward_removed": true,
+        "session_id_length": 32,
+        "transport": "abstract",
+        "socket_mode": null,
+        "hello_ok": true,
+        "capabilities": 4,
+        "capabilities_available": 3,
+        "serve_protocol_available": true,
+        "video_without_channel": "video_channel_absent",
+        "reserved_unavailable": 3,
+        "unknown_kind_recovered": true,
+        "requests": 13,
+        "exit_code": 0,
+        "stderr_bytes": 0,
+        "socket_present_after_exit": false,
+        "cleanup_removed": true
+      },
+      {
+        "case": "wrong_session",
+        "forward_removed": true,
+        "session_id_length": 32,
+        "transport": "abstract",
+        "socket_mode": null,
+        "rejected": "invalid_session",
+        "closed": true,
+        "exit_code": 74,
+        "stderr_bytes": 50,
+        "socket_present_after_exit": false,
+        "cleanup_removed": true
+      },
+      {
+        "case": "bad_magic",
+        "forward_removed": true,
+        "session_id_length": 32,
+        "transport": "abstract",
+        "socket_mode": null,
+        "rejected": "bad_magic",
+        "closed": true,
+        "exit_code": 74,
+        "stderr_bytes": 43,
+        "socket_present_after_exit": false,
+        "cleanup_removed": true
+      }
+    ]
+  },
+  "regression": {
+    "native_tests": "test result: ok. 4 passed; 0 failed",
+    "display_mirror_probe_exit": 0,
+    "display_fault_probe_exit": 0,
+    "leftover_virtual_displays": 0
+  }
+}

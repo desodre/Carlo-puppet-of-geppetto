@@ -18,15 +18,17 @@ use serde::Serialize;
 pub(crate) mod mirror;
 #[cfg(target_os = "android")]
 mod native;
+pub(crate) mod stream;
 pub(crate) mod surface;
 
 /// Per-packet bound from the plan's initial limits.
 const MAX_PACKET_BYTES: usize = 8 * 1024 * 1024;
 /// Whole-probe bound; the fixed preset produces a few hundred KiB.
 const MAX_STREAM_BYTES: usize = 16 * 1024 * 1024;
-const FLAG_KEY_FRAME: u32 = 1;
-const FLAG_CODEC_CONFIG: u32 = 2;
-const FLAG_END_OF_STREAM: u32 = 4;
+/// `AMEDIACODEC_BUFFER_FLAG_*` bits of one encoder output buffer.
+pub(crate) const FLAG_KEY_FRAME: u32 = 1;
+pub(crate) const FLAG_CODEC_CONFIG: u32 = 2;
+pub(crate) const FLAG_END_OF_STREAM: u32 = 4;
 
 /// Shell profiles on which this probe has actually run (API level, architecture).
 /// Only public NDK exports are used, but other profiles stay unavailable until executed.
@@ -225,6 +227,28 @@ impl Collector {
 
     pub(crate) fn ended(&self) -> bool {
         self.stream.end_of_stream
+    }
+}
+
+/// Destination of drained encoder output. Called only on the thread that owns
+/// the encoder, while the dequeued buffer is still held: an implementation must
+/// bound whatever it does with `data` and must not keep the slice.
+pub(crate) trait Sink {
+    /// Take one output buffer with its `FLAG_*` bits.
+    fn push(&mut self, flags: u32, pts_us: i64, data: &[u8]) -> Result<(), Error>;
+    /// Whether the end-of-stream buffer was pushed.
+    fn ended(&self) -> bool;
+    /// Output dimensions announced by the encoder before its first buffer.
+    fn format(&mut self, _width: Option<i32>, _height: Option<i32>) {}
+}
+
+impl Sink for Collector {
+    fn push(&mut self, flags: u32, pts_us: i64, data: &[u8]) -> Result<(), Error> {
+        Collector::push(self, flags, pts_us, data)
+    }
+
+    fn ended(&self) -> bool {
+        Collector::ended(self)
     }
 }
 

@@ -43,13 +43,15 @@ fn serve_that_cannot_start_is_not_a_fake_running_agent() {
     );
     let doctor = command(&["doctor", "--json"]);
     let report: serde_json::Value = serde_json::from_slice(&doctor.stdout).unwrap();
-    let serve = report["capabilities"]
+    // The protocol exists on every target; capture and stream do not exist here.
+    let available: Vec<&str> = report["capabilities"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|capability| capability["name"] == "serve_protocol")
-        .unwrap();
-    assert_eq!(serve["available"], false);
+        .filter(|capability| capability["available"] == true)
+        .map(|capability| capability["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(available, ["serve_protocol"]);
 }
 
 #[test]
@@ -88,7 +90,7 @@ fn json_report_remains_one_document_when_environment_is_unavailable() {
             .as_array()
             .unwrap()
             .iter()
-            .all(|capability| capability["available"] == false)
+            .all(|capability| capability["available"] == (capability["name"] == "serve_protocol"))
     );
     if cfg!(not(target_os = "android")) {
         assert_eq!(output.status.code(), Some(69));

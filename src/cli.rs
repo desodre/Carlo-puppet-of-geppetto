@@ -19,7 +19,7 @@ Commands:
   display-mirror-probe  Mirror the default display into the H.264 encoder (pinned build only; JSON)
   display-mirror-dump   Emit that mirrored H.264 Annex B stream as command data
   display-fault-probe   Provoke the classified mirror failures (pinned build only; JSON)
-  serve --session-dir DIR  One-client control channel on DIR/control.sock
+  serve --session-dir DIR  One client, control and video channels, on DIR/control.sock
   --version, -V    Show the package version
   --help, -h       Show this help
 
@@ -31,8 +31,11 @@ The fault probe provokes permission_denied, display_absent and unsupported_forma
 in three isolated sessions and passes only if no display was created.
 The surface parcel stays in this process: nothing is transacted or mirrored.
 Serve needs an absolute DIR owned by the caller with mode 0700. It prints one
-JSON ready line with the transport and session identifier, accepts exactly one
-same-UID client and offers hello, ping, capabilities and shutdown only. If the
+JSON ready line with the transport and session identifier and accepts one
+same-UID client: its control connection (hello, ping, capabilities, channels,
+video.start, video.stop, shutdown) and, within 10 s of hello, one video
+connection attached with the same session identifier. Video streams only on
+the pinned display-mirror build and is reported unavailable elsewhere. If the
 socket file cannot be created (permission denied) it uses a random abstract
 socket instead and says so on the ready line (docs/protocol.md).
 Exit codes: 0 success, 64 invalid arguments, 69 unavailable or refused,

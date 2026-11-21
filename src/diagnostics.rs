@@ -7,7 +7,8 @@ use serde::Serialize;
 
 use crate::error::CarloError;
 
-/// A known capability, reported conservatively until its implementation exists.
+/// A known capability, reported conservatively: unavailable until its
+/// implementation exists and this process is on a profile it was validated for.
 #[derive(Debug, Serialize)]
 pub struct Capability {
     name: &'static str,
@@ -69,14 +70,26 @@ impl Diagnostics {
             .ok()
             .map(|value| value.trim_matches(['\0', '\n', '\r']).to_owned())
             .filter(|value| !value.is_empty());
-        Ok(Self::from_environment(
+        let report = Self::from_environment(
             std::env::consts::OS,
             std::env::consts::ARCH,
             android_api,
             device_abi,
             effective_uid,
             selinux_context,
-        ))
+        );
+        // The mirror gate needs the build fingerprint: a property read, no Binder.
+        let fingerprint = crate::accessibility::fingerprint()?;
+        let mirror =
+            crate::video::mirror::Profile::detect(&report, fingerprint.as_deref()).is_some();
+        Ok(report.with_display_mirror(mirror))
+    }
+
+    /// Recompute the capability list for a process that is (`true`) or is not on
+    /// the one build the display mirror is pinned to.
+    pub(crate) fn with_display_mirror(mut self, pinned_profile: bool) -> Self {
+        self.capabilities = capabilities(pinned_profile);
+        self
     }
 
     pub(crate) fn from_environment(
@@ -145,28 +158,7 @@ impl Diagnostics {
             selinux_context,
             foundation_ready: is_android && api_ready && abi_ready && identity_ready,
             checks,
-            capabilities: vec![
-                Capability {
-                    name: "binder_hierarchy",
-                    available: false,
-                    reason: "not implemented; P1/P4",
-                },
-                Capability {
-                    name: "display_capture",
-                    available: false,
-                    reason: "not implemented; P2/P6",
-                },
-                Capability {
-                    name: "h264_stream",
-                    available: false,
-                    reason: "not implemented; P2/P5",
-                },
-                Capability {
-                    name: "serve_protocol",
-                    available: false,
-                    reason: "control channel only (handshake, ping, shutdown); no data commands yet; P3",
-                },
-            ],
+            capabilities: capabilities(false),
         }
     }
 
@@ -224,15 +216,51 @@ impl Diagnostics {
             .map_err(CarloError::output)?;
         }
         for capability in &self.capabilities {
-            writeln!(
-                output,
-                "unavailable {}: {}",
-                capability.name, capability.reason
-            )
-            .map_err(CarloError::output)?;
+            let state = if capability.available {
+                "available"
+            } else {
+                "unavailable"
+            };
+            writeln!(output, "{state} {}: {}", capability.name, capability.reason)
+                .map_err(CarloError::output)?;
         }
         Ok(())
     }
+}
+
+/// The capability list. Display capture and the H.264 stream exist only where
+/// the mirror profile gate passes (one exact build); the hierarchy does not exist
+/// anywhere yet. The serve protocol itself runs on every target.
+fn capabilities(pinned_mirror_profile: bool) -> Vec<Capability> {
+    let mirror = |name, available_reason| Capability {
+        name,
+        available: pinned_mirror_profile,
+        reason: if pinned_mirror_profile {
+            available_reason
+        } else {
+            "unavailable on this target: the display mirror is pinned to one validated build"
+        },
+    };
+    vec![
+        Capability {
+            name: "binder_hierarchy",
+            available: false,
+            reason: "not implemented; P1/P4",
+        },
+        mirror(
+            "display_capture",
+            "main display mirrored into the encoder on the pinned build; other displays and rotation not implemented",
+        ),
+        mirror(
+            "h264_stream",
+            "video.start/video.stop over the video channel on the pinned build; no reconfiguration or statistics",
+        ),
+        Capability {
+            name: "serve_protocol",
+            available: true,
+            reason: "control and video channels bound to one session; hierarchy and stats not implemented",
+        },
+    ]
 }
 
 fn check(
@@ -307,9 +335,19 @@ mod tests {
         assert_eq!(parse_effective_uid("Uid:\t0\n"), None);
     }
 
+    fn available(report: &Diagnostics) -> Vec<&'static str> {
+        report
+            .capabilities
+            .iter()
+            .filter(|capability| capability.available)
+            .map(|capability| capability.name)
+            .collect()
+    }
+
     #[test]
-    fn foundation_never_advertises_unimplemented_android_features() {
-        let report = Diagnostics::from_environment(
+    fn capture_and_stream_are_advertised_only_on_the_pinned_mirror_profile() {
+        // The API 34 reference profile: ready foundation, no mirror.
+        let reference = Diagnostics::from_environment(
             "android",
             "aarch64",
             Some(34),
@@ -317,13 +355,36 @@ mod tests {
             Some(2000),
             Some("u:r:shell:s0".into()),
         );
-        assert!(report.foundation_ready);
-        assert!(
+        assert!(reference.foundation_ready);
+        assert_eq!(available(&reference), ["serve_protocol"]);
+        let host = Diagnostics::from_environment("linux", "x86_64", None, None, Some(1000), None);
+        assert_eq!(available(&host), ["serve_protocol"]);
+        // What this very process reports: never capture or stream off the device.
+        #[cfg(not(target_os = "android"))]
+        assert_eq!(
+            available(&Diagnostics::collect().unwrap()),
+            ["serve_protocol"]
+        );
+        let names = |report: &Diagnostics| {
             report
                 .capabilities
                 .iter()
-                .all(|capability| !capability.available)
+                .map(|capability| capability.name)
+                .collect::<Vec<_>>()
+        };
+        let pinned = reference.with_display_mirror(true);
+        assert_eq!(
+            available(&pinned),
+            ["display_capture", "h264_stream", "serve_protocol"]
         );
+        // The hierarchy is never available; the list itself never changes shape.
+        assert_eq!(names(&pinned), names(&host));
+        assert_eq!(names(&host)[0], "binder_hierarchy");
+        let unpinned = pinned.with_display_mirror(false);
+        assert_eq!(available(&unpinned), ["serve_protocol"]);
+        for capability in &unpinned.capabilities {
+            assert!(!capability.reason.is_empty());
+        }
     }
 
     #[test]

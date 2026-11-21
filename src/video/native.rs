@@ -10,7 +10,7 @@
 //! `eglSwapBuffers` and codec calls can block without a cancellation point: the
 //! deadline is checked between calls and the bounded host session is the backstop.
 
-use super::{Collector, Config, Error, Outcome};
+use super::{Collector, Config, Error, Outcome, Sink};
 use crate::binder::native::Library;
 use std::{
     ffi::{CStr, c_char, c_void},
@@ -460,7 +460,7 @@ impl Encoder {
     fn drain(
         &self,
         timeout_us: i64,
-        collector: &mut Collector,
+        collector: &mut dyn Sink,
         outcome: &mut Outcome,
     ) -> Result<(), Error> {
         let mut timeout_us = timeout_us;
@@ -480,6 +480,7 @@ impl Encoder {
                         let format = MediaFormat { api: self.api, raw };
                         outcome.output_width = format.int(c"width");
                         outcome.output_height = format.int(c"height");
+                        collector.format(outcome.output_width, outcome.output_height);
                     }
                 }
                 index if index < 0 => {
@@ -507,7 +508,7 @@ impl Encoder {
         &self,
         index: usize,
         info: &BufferInfo,
-        collector: &mut Collector,
+        collector: &mut dyn Sink,
     ) -> Result<(), Error> {
         let invalid = Error::InvalidStream("buffer_range");
         let offset = usize::try_from(info.offset).map_err(|_| invalid.clone())?;
@@ -587,13 +588,13 @@ impl ConfiguredInput {
         self.window.raw
     }
 
-    /// Move the currently available output into `collector`, waiting at most
+    /// Move the currently available output into the sink, waiting at most
     /// `timeout_us` for the first buffer. Frames come from whoever queues to the
     /// input window; this type never draws.
     pub(super) fn drain(
         &self,
         timeout_us: i64,
-        collector: &mut Collector,
+        collector: &mut dyn Sink,
         outcome: &mut Outcome,
     ) -> Result<(), Error> {
         self.encoder.drain(timeout_us, collector, outcome)
