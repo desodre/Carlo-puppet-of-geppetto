@@ -19,12 +19,18 @@
 //! accounting and the success criterion are safe Rust exercised on the host. The
 //! Android-only `ffi` module merely emits the ordered fields.
 //!
+//! One session implementation serves every caller. It is driven through a
+//! [`Consumer`]: the bounded probes use [`Bounded`] (a frame count or a capture
+//! deadline ends it), `serve` uses its packet writer (a stop request ends it) via
+//! [`stream`]. Either way every platform object is created, used and dropped by
+//! the one thread that calls the session.
+//!
 //! Binder and codec calls are synchronous and are not assumed to be cancellable:
 //! the waits this module controls are bounded by monotonic deadlines, and the
 //! bounded host session is the backstop. If the process dies, the display service
 //! destroys the display through the death link on the callback Binder.
 
-use super::{Collector, Config, Error, PRESET, Stream};
+use super::{Collector, Config, Error, PRESET, Sink, Stream};
 use crate::{diagnostics::Diagnostics, error::CarloError};
 use serde::Serialize;
 use std::{
@@ -538,14 +544,133 @@ fn run(
     }
 }
 
-#[cfg(target_os = "android")]
+/// Drives one mirror session from the session thread: receives the encoder
+/// output ([`Sink`]) and decides how long frames are captured.
+pub(crate) trait Consumer: Sink {
+    /// The virtual display exists and the encoder is started. Called once, before
+    /// any output is pushed.
+    fn started(&mut self, codec_name: Option<&str>);
+    /// Whether capture should go on; polled between bounded drains (10 ms). Once
+    /// it is false the display is released and the encoder drained to its end.
+    fn wanted(&mut self) -> bool;
+}
+
+/// The probes' consumer: capture ends at `frames` coded frames or [`CAPTURE`]
+/// after the display was created, whichever comes first.
+struct Bounded<'a> {
+    collector: &'a mut Collector,
+    frames: u32,
+    deadline: Option<Instant>,
+}
+
+impl Sink for Bounded<'_> {
+    fn push(&mut self, flags: u32, pts_us: i64, data: &[u8]) -> Result<(), Error> {
+        self.collector.push(flags, pts_us, data)
+    }
+
+    fn ended(&self) -> bool {
+        self.collector.ended()
+    }
+}
+
+impl Consumer for Bounded<'_> {
+    fn started(&mut self, _: Option<&str>) {
+        self.deadline = Some(Instant::now() + CAPTURE);
+    }
+
+    fn wanted(&mut self) -> bool {
+        self.collector.stream.coded_frames() < self.frames
+            && self
+                .deadline
+                .is_some_and(|deadline| Instant::now() < deadline)
+    }
+}
+
 fn probe(request: &Request, collector: &mut Collector, outcome: &mut Outcome) -> Result<(), Error> {
-    ffi::mirror(request, collector, outcome)
+    let mut consumer = Bounded {
+        collector,
+        frames: request.config.frames,
+        deadline: None,
+    };
+    session(request, &mut consumer, outcome)
+}
+
+#[cfg(target_os = "android")]
+fn session(
+    request: &Request,
+    consumer: &mut dyn Consumer,
+    outcome: &mut Outcome,
+) -> Result<(), Error> {
+    ffi::mirror(request, consumer, outcome)
 }
 
 #[cfg(not(target_os = "android"))]
-fn probe(_: &Request, _: &mut Collector, _: &mut Outcome) -> Result<(), Error> {
+fn session(_: &Request, _: &mut dyn Consumer, _: &mut Outcome) -> Result<(), Error> {
     unreachable!("profile requires Android")
+}
+
+/// Proof that the process runs on the pinned build. Only [`Profile::detect`]
+/// creates one, and only when the same gate as the probes passes, so a stream
+/// cannot be started on any other target.
+pub(crate) struct Profile(());
+
+impl Profile {
+    pub(crate) fn detect(environment: &Diagnostics, fingerprint: Option<&str>) -> Option<Self> {
+        supported(
+            environment.shell_api(),
+            environment.effective_uid(),
+            std::env::consts::ARCH,
+            fingerprint,
+        )
+        .then_some(Self(()))
+    }
+}
+
+/// Mirror the default display into an encoder configured for `width`x`height`
+/// until `consumer` stops wanting frames, then release the display and drain the
+/// encoder to its end. Same session, release guard and drop order as the probes;
+/// must be called, and returns, on one thread. A failed release is an error.
+pub(crate) fn stream(
+    _: &Profile,
+    width: i32,
+    height: i32,
+    frames_per_second: i32,
+    bits_per_second: i32,
+    consumer: &mut dyn Consumer,
+) -> Result<(), Error> {
+    let request = Request {
+        target: Target::Display(DEFAULT_DISPLAY),
+        extra_flags: 0,
+        config: Config {
+            width,
+            height,
+            frames_per_second,
+            bits_per_second,
+            key_frame_interval_seconds: STREAM_KEY_FRAME_INTERVAL_SECONDS,
+            // No frame cap: the consumer ends the capture.
+            frames: 0,
+        },
+    };
+    let mut outcome = Outcome::default();
+    let result = session(&request, consumer, &mut outcome);
+    result.and(outcome.release_error.map_or(Ok(()), Err))
+}
+
+/// Key frame interval of every stream; reported to the client as accepted.
+pub(crate) const STREAM_KEY_FRAME_INTERVAL_SECONDS: i32 = 1;
+
+/// Stable protocol code of a session failure: the three classified failures,
+/// a refusal, a timeout, or `internal` for everything else. Never a platform
+/// message or status.
+pub(crate) fn failure_code(error: &Error) -> &'static str {
+    match (FailureClass::of(error), error) {
+        (Some(FailureClass::PermissionDenied), _) => "permission_denied",
+        (Some(FailureClass::DisplayAbsent), _) => "display_absent",
+        (Some(FailureClass::UnsupportedFormat), _) => "unsupported_format",
+        (None, Error::DisplayRefused) => "display_refused",
+        (None, Error::Timeout(_)) => "timeout",
+        (None, _) => "internal",
+    }
 }
 
 /// One provoked failure: the request that causes it and what must be observed.
@@ -741,14 +866,14 @@ fn fault_report(
 #[cfg(target_os = "android")]
 mod ffi {
     use super::{
-        CAPTURE, CREATE, Callbacks, END_OF_STREAM, Field, LIST, LIST_REQUEST, Outcome, RELEASE,
+        CREATE, Callbacks, Consumer, END_OF_STREAM, Field, LIST, LIST_REQUEST, Outcome, RELEASE,
         RELEASE_REQUEST, Reply, Request, create_request, created_display, listed_displays, located,
         rejected_format, released_display, string8_words, wanted,
     };
     use crate::{
         binder::{native::Library, pool},
         video::{
-            Collector, Error, Outcome as EncoderOutcome,
+            Error, Outcome as EncoderOutcome,
             native::{ConfiguredInput, Window},
         },
     };
@@ -1359,14 +1484,13 @@ mod ffi {
         located(id, &listed)
     }
 
-    /// Send the create request and drain mirrored frames until `frames` coded
-    /// frames arrived or the capture deadline passed.
+    /// Send the create request, tell the consumer the session started and drain
+    /// mirrored frames for as long as the consumer wants them.
     fn capture(
         request: Parcel,
         service: &Strong,
         input: &ConfiguredInput,
-        frames: u32,
-        collector: &mut Collector,
+        consumer: &mut dyn Consumer,
         outcome: &mut Outcome,
         encoder: &mut EncoderOutcome,
     ) -> Result<(), Error> {
@@ -1376,12 +1500,12 @@ mod ffi {
         drop(reply);
         outcome.display_id = Some(id);
         outcome.display_created = true;
-        let deadline = Instant::now() + CAPTURE;
-        while collector.stream.coded_frames() < frames && Instant::now() < deadline {
-            if collector.ended() {
+        consumer.started(outcome.codec_name.as_deref());
+        while consumer.wanted() {
+            if consumer.ended() {
                 return Err(Error::InvalidStream("unexpected_end_of_stream"));
             }
-            input.drain(DRAIN_SLICE_US, collector, encoder)?;
+            input.drain(DRAIN_SLICE_US, &mut *consumer, encoder)?;
         }
         Ok(())
     }
@@ -1389,16 +1513,16 @@ mod ffi {
     /// Ask the encoder to finish and drain until its end of stream, bounded.
     fn finish(
         input: &ConfiguredInput,
-        collector: &mut Collector,
+        consumer: &mut dyn Consumer,
         encoder: &mut EncoderOutcome,
     ) -> Result<(), Error> {
         input.end_input()?;
         let deadline = Instant::now() + END_OF_STREAM;
-        while !collector.ended() {
+        while !consumer.ended() {
             if Instant::now() >= deadline {
                 return Err(Error::Timeout("end_of_stream"));
             }
-            input.drain(DRAIN_SLICE_US, collector, encoder)?;
+            input.drain(DRAIN_SLICE_US, &mut *consumer, encoder)?;
         }
         Ok(())
     }
@@ -1415,9 +1539,12 @@ mod ffi {
     /// the service proxy, and last the encoder input, whose fields drop window
     /// first and codec second. Request and reply parcels are consumed or dropped
     /// before the capture loop starts; the libraries are never unloaded.
+    ///
+    /// Every owner above is `!Send` and lives in this frame, so all of them are
+    /// created and dropped by the calling thread whoever the consumer is.
     pub(super) fn mirror(
         request: &Request,
-        collector: &mut Collector,
+        consumer: &mut dyn Consumer,
         outcome: &mut Outcome,
     ) -> Result<(), Error> {
         let api = Api::global()?;
@@ -1445,8 +1572,7 @@ mod ffi {
             create,
             &service,
             &input,
-            request.config.frames,
-            collector,
+            &mut *consumer,
             outcome,
             &mut encoder,
         );
@@ -1456,7 +1582,7 @@ mod ffi {
         let released = display.release();
         outcome.display_released = outcome.display_created && released.is_ok();
         outcome.release_error = released.err();
-        let finished = captured.and_then(|()| finish(&input, collector, &mut encoder));
+        let finished = captured.and_then(|()| finish(&input, consumer, &mut encoder));
         outcome.output_width = encoder.output_width;
         outcome.output_height = encoder.output_height;
         outcome.callbacks = callbacks.counts();
@@ -1930,6 +2056,75 @@ mod tests {
             assert!(!outcome.passed(), "{outcome:?}");
         }
         assert!(!Outcome::default().passed());
+    }
+
+    #[test]
+    fn probe_consumer_ends_at_the_frame_count_or_capture_deadline() {
+        let mut collector = Collector::new(&PRESET, false);
+        let mut consumer = Bounded {
+            collector: &mut collector,
+            frames: 2,
+            deadline: None,
+        };
+        // Nothing is wanted before the display exists.
+        assert!(!consumer.wanted());
+        consumer.started(Some("codec"));
+        assert!(consumer.wanted() && !Sink::ended(&consumer));
+        Sink::push(&mut consumer, super::super::FLAG_CODEC_CONFIG, 0, SPS_PPS).unwrap();
+        Sink::push(&mut consumer, super::super::FLAG_KEY_FRAME, 1, IDR).unwrap();
+        assert!(consumer.wanted(), "parameter sets are not a frame");
+        Sink::push(&mut consumer, 0, 2, IDR).unwrap();
+        assert!(!consumer.wanted());
+        Sink::push(&mut consumer, super::super::FLAG_END_OF_STREAM, 2, &[]).unwrap();
+        assert!(Sink::ended(&consumer));
+        // The collector's own limits still reach the session as typed errors.
+        assert_eq!(
+            Sink::push(&mut consumer, 0, 3, IDR),
+            Err(Error::InvalidStream("output_after_end_of_stream"))
+        );
+        assert_eq!(collector.stream.coded_frames(), 2);
+        // A passed capture deadline ends an idle capture; no frames ends at once.
+        let mut idle = Collector::new(&PRESET, false);
+        let mut consumer = Bounded {
+            collector: &mut idle,
+            frames: 30,
+            deadline: Some(Instant::now() - Duration::from_millis(1)),
+        };
+        assert!(!consumer.wanted());
+        let mut frameless = Bounded {
+            collector: &mut Collector::new(&FRAMELESS, false),
+            frames: FRAMELESS.frames,
+            deadline: None,
+        };
+        frameless.started(None);
+        assert!(!frameless.wanted());
+    }
+
+    #[test]
+    fn stream_failures_map_to_stable_codes_without_platform_detail() {
+        assert_eq!(
+            failure_code(&Error::PermissionDenied("create_display")),
+            "permission_denied"
+        );
+        assert_eq!(failure_code(&Error::DisplayAbsent), "display_absent");
+        assert_eq!(
+            failure_code(&Error::UnsupportedFormat {
+                operation: "configure",
+                status: -1010
+            }),
+            "unsupported_format"
+        );
+        assert_eq!(failure_code(&Error::DisplayRefused), "display_refused");
+        assert_eq!(failure_code(&Error::Timeout("end_of_stream")), "timeout");
+        for error in unclassified() {
+            if !matches!(error, Error::DisplayRefused | Error::Timeout(_)) {
+                assert_eq!(failure_code(&error), "internal", "{error:?}");
+            }
+        }
+        assert_eq!(
+            STREAM_KEY_FRAME_INTERVAL_SECONDS,
+            PRESET.key_frame_interval_seconds
+        );
     }
 
     #[test]

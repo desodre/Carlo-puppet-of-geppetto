@@ -1,9 +1,10 @@
 //! Native Android agent foundations: command parsing, diagnostics and typed errors.
 //!
 //! Binder lookup and a synthetic H.264 encoder have probes. A display mirror proof
-//! and its classified failures exist for one pinned build only. `serve` offers a
-//! one-client control channel (handshake, ping, capabilities, shutdown) over a
-//! Unix socket; hierarchy and streaming commands are not implemented.
+//! and its classified failures exist for one pinned build only. `serve` offers
+//! one client a control channel and a video channel bound to the same session
+//! over a Unix socket; the video channel streams the mirrored main display on
+//! that pinned build only. Hierarchy commands are not implemented.
 
 mod accessibility;
 pub mod binder;

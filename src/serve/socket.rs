@@ -2,8 +2,9 @@
 //!
 //! All libc FFI used by `serve` lives here behind safe wrappers. Thread rules:
 //! `umask` and `signal` are process-global, so [`ControlSocket::bind`] and
-//! [`Signals::install`] must run on the only thread of the process, which is how
-//! `serve` runs. The handler only stores to an atomic.
+//! [`Signals::install`] must run while the process has one thread, which is how
+//! `serve` starts: its other threads are spawned only after the control
+//! handshake. The handler only stores to an atomic.
 
 use std::ffi::{c_int, c_uint, c_void};
 use std::fs;
@@ -23,7 +24,7 @@ pub(super) const SOCKET_NAME: &str = "control.sock";
 /// `sockaddr_un.sun_path` holds 108 bytes including the terminating NUL.
 const SUN_PATH_MAX: usize = 107;
 /// Longest uninterruptible wait: bounds signal latency and deadline overshoot.
-const SLICE: Duration = Duration::from_millis(50);
+pub(super) const SLICE: Duration = Duration::from_millis(50);
 /// Prefix of an abstract control socket name; 32 lowercase hex digits follow.
 const ABSTRACT_PREFIX: &str = "carlo-";
 /// Permission bits a private socket must have: owner read/write only.
@@ -105,9 +106,11 @@ enum Location {
     Abstract { name: String },
 }
 
-/// The listening control socket. Dropping it closes the listener; a filesystem
-/// path is also removed, but only while it is still the socket file created
-/// here. An abstract name has nothing to unlink: the kernel frees it on close.
+/// The listening socket of a session: it admits the control client and then, for
+/// a bounded window, the video channel. Dropping it closes the listener; a
+/// filesystem path is also removed, but only while it is still the socket file
+/// created here. An abstract name has nothing to unlink: the kernel frees it on
+/// close.
 pub(super) struct ControlSocket {
     listener: UnixListener,
     location: Location,
@@ -210,14 +213,9 @@ impl ControlSocket {
         }
     }
 
-    /// Wait for the single client, then close the listener (and remove a
-    /// filesystem path) on every outcome: the accepted connection stays open,
-    /// nobody else can attach.
-    pub(super) fn accept_one(
-        self,
-        timeout: Duration,
-        stop: &AtomicBool,
-    ) -> Result<UnixStream, Error> {
+    /// Wait for one connection. The listener stays open: its owner decides how
+    /// long, and dropping it is what stops anybody else from connecting.
+    pub(super) fn accept(&self, timeout: Duration, stop: &AtomicBool) -> Result<UnixStream, Error> {
         accept_bounded(&self.listener, timeout, stop)
     }
 }
@@ -385,6 +383,11 @@ impl<'a> BoundedStream<'a> {
     /// Absolute deadline for the operations that follow.
     pub(super) fn set_deadline(&mut self, deadline: Instant) {
         self.deadline = deadline;
+    }
+
+    /// The connection itself, with the slice timeouts still set on the socket.
+    pub(super) fn into_inner(self) -> UnixStream {
+        self.stream
     }
 
     /// The reason this wrapper failed the last operation, if it did.
@@ -606,7 +609,7 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn abstract_socket_has_a_fresh_name_one_client_and_no_file() {
+    fn abstract_socket_has_a_fresh_name_no_file_and_is_released_on_drop() {
         use std::os::linux::net::SocketAddrExt;
         let first = ControlSocket::bind_abstract().unwrap();
         let second = ControlSocket::bind_abstract().unwrap();
@@ -633,9 +636,13 @@ mod tests {
 
         let stop = AtomicBool::new(false);
         let mut client = connect_abstract(&name).unwrap();
-        let mut accepted = first.accept_one(Duration::from_secs(5), &stop).unwrap();
+        let mut accepted = first.accept(Duration::from_secs(5), &stop).unwrap();
         assert_eq!(peer_credentials(&accepted).unwrap().uid, effective_uid());
-        // The listener is gone: nobody else can attach, the connection survives.
+        // Still listening until its owner drops it: a second connection (the
+        // video channel) can queue. Once dropped nobody else can attach, and
+        // the accepted connection survives.
+        let _queued = connect_abstract(&name).unwrap();
+        drop(first);
         let refused = connect_abstract(&name).unwrap_err();
         assert_eq!(refused.kind(), io::ErrorKind::ConnectionRefused);
         client.write_all(b"ok").unwrap();
@@ -646,9 +653,10 @@ mod tests {
         // A listener that times out or is dropped also releases its name.
         let name = second.address().to_owned();
         assert!(matches!(
-            second.accept_one(Duration::from_millis(60), &stop),
+            second.accept(Duration::from_millis(60), &stop),
             Err(Error::AcceptTimeout)
         ));
+        drop(second);
         assert!(connect_abstract(&name).is_err());
     }
 

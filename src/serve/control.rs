@@ -1,21 +1,18 @@
 //! Transport-independent control channel: one request frame in, one response out.
 //!
 //! Responses are built only from constants and this build's own data. Nothing a
-//! client sends is ever copied into a response or into a diagnostic.
+//! client sends is ever copied into a response or into a diagnostic. The video
+//! commands are delegated to [`Video`], which owns the second channel.
 
 use serde_json::{Value, json};
 
+use super::socket::ControlSocket;
+use super::video::Video;
 use crate::diagnostics::Diagnostics;
 use crate::protocol::{Frame, Kind, VERSION};
 
 /// Commands reserved by the plan that have no implementation behind them yet.
-const RESERVED: [&str; 5] = [
-    "hierarchy.dump",
-    "display.info",
-    "video.start",
-    "video.stop",
-    "stats",
-];
+const RESERVED: [&str; 3] = ["hierarchy.dump", "display.info", "stats"];
 
 /// What the connection owner must do after sending a response.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,12 +39,13 @@ pub(super) struct Control {
     hello: Value,
     capabilities: Value,
     initialized: bool,
+    video: Video,
 }
 
 impl Control {
     /// `session` is the identifier printed on the ready line; identity and
     /// capabilities come from the same [`Diagnostics`] that `doctor` reports.
-    pub(super) fn new(session: String, diagnostics: &Diagnostics) -> Self {
+    pub(super) fn new(session: String, diagnostics: &Diagnostics, video: Video) -> Self {
         let capabilities =
             serde_json::to_value(diagnostics.capabilities()).unwrap_or_else(|_| json!([]));
         let hello = json!({
@@ -70,7 +68,19 @@ impl Control {
             hello,
             capabilities,
             initialized: false,
+            video,
         }
+    }
+
+    /// Hand the session's listener to the video channel, which admits one
+    /// attachment bound to this session within its deadline and then closes it.
+    pub(super) fn listen(&mut self, listener: ControlSocket) {
+        self.video.listen(listener, self.session.clone());
+    }
+
+    /// Stop any stream, close the video channel and the listener. Bounded.
+    pub(super) fn teardown(&mut self) {
+        self.video.shutdown();
     }
 
     /// Whether a `hello` has succeeded on this connection.
@@ -114,6 +124,12 @@ impl Control {
                 Next::Continue,
             ),
             "shutdown" => (json!({ "ok": true }), Next::Shutdown),
+            "channels" => (
+                json!({ "ok": true, "video": self.video.channel() }),
+                Next::Continue,
+            ),
+            "video.start" => (self.video.start(frame.request_id, request), Next::Continue),
+            "video.stop" => (self.video.stop(), Next::Continue),
             name if RESERVED.contains(&name) => (failure("unavailable"), Next::Continue),
             _ => (failure("unknown_command"), Next::Continue),
         }
@@ -140,7 +156,7 @@ impl Control {
     }
 }
 
-fn failure(code: &'static str) -> Value {
+pub(super) fn failure(code: &'static str) -> Value {
     json!({ "ok": false, "error": { "code": code } })
 }
 
@@ -150,7 +166,7 @@ fn reject(code: &'static str) -> (Value, Next) {
 
 /// Compare without an early exit on the first differing byte. Only the length
 /// (fixed and public: 32 hex digits) is observable through timing.
-fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
+pub(super) fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
     if left.len() != right.len() {
         return false;
     }
@@ -177,7 +193,7 @@ mod tests {
             Some(2000),
             None,
         );
-        Control::new(SESSION.into(), &diagnostics)
+        Control::new(SESSION.into(), &diagnostics, Video::unattached())
     }
 
     fn send(control: &mut Control, request_id: u32, payload: &[u8]) -> (Value, Next, String) {
@@ -236,10 +252,14 @@ mod tests {
         assert_eq!(capabilities.len(), 4);
         for capability in capabilities {
             assert!(capability["name"].is_string() && capability["reason"].is_string());
-            assert_eq!(capability["available"], false);
+            // The API 34 reference profile is not the mirror's pinned build.
+            assert_eq!(
+                capability["available"],
+                capability["name"] == "serve_protocol"
+            );
         }
         let host = Diagnostics::from_environment("linux", "x86_64", None, None, Some(1000), None);
-        let mut control = Control::new(SESSION.into(), &host);
+        let mut control = Control::new(SESSION.into(), &host, Video::unattached());
         let (body, _, _) = send(&mut control, 1, &hello(SESSION));
         assert!(body["device"]["android_api"].is_null() && body["device"]["abi"].is_null());
     }
@@ -331,7 +351,29 @@ mod tests {
             let (body, next, _) = send(&mut control, 5, request.as_bytes());
             assert_eq!((code(&body), next), ("unavailable", Next::Continue));
         }
-        for name in [SENTINEL, "", "PING", "ping ", "hierarchy", "video"] {
+        // Without a video channel the video commands answer from their own table.
+        let (body, next, _) = send(&mut control, 5, br#"{"command":"channels"}"#);
+        assert_eq!(
+            (body, next),
+            (json!({"ok": true, "video": "absent"}), Next::Continue)
+        );
+        let request = json!({ "command": "video.start", "argument": SENTINEL }).to_string();
+        let (body, next, _) = send(&mut control, 5, request.as_bytes());
+        assert_eq!(
+            (code(&body), next),
+            ("video_channel_absent", Next::Continue)
+        );
+        let (body, next, _) = send(&mut control, 5, br#"{"command":"video.stop"}"#);
+        assert_eq!((code(&body), next), ("not_streaming", Next::Continue));
+        for name in [
+            SENTINEL,
+            "",
+            "PING",
+            "ping ",
+            "hierarchy",
+            "video",
+            "attach",
+        ] {
             let request = json!({ "command": name }).to_string();
             let (body, next, _) = send(&mut control, 6, request.as_bytes());
             assert_eq!((code(&body), next), ("unknown_command", Next::Continue));

@@ -158,6 +158,20 @@ impl Agent {
         stream
     }
 
+    fn attach_body(&self) -> String {
+        json!({ "command": "attach", "channel": "video", "session": self.session }).to_string()
+    }
+
+    /// Open the video channel and bind it to this session.
+    fn attach_video(&self) -> UnixStream {
+        let mut video = self.connect();
+        assert_eq!(
+            request(&mut video, 77, &self.attach_body()),
+            json!({"ok": true, "channel": "video"})
+        );
+        video
+    }
+
     fn hello_body(&self) -> String {
         json!({ "command": "hello", "protocol": 1, "session": self.session }).to_string()
     }
@@ -238,20 +252,22 @@ fn happy_path_handshake_commands_and_shutdown_exit_zero() {
         hello["limits"],
         json!({"control_bytes": 65536, "payload_bytes": 8_388_608})
     );
-    // The same list `doctor` prints, and nothing is advertised as available.
+    // The same list `doctor` prints; off the pinned device only the protocol
+    // itself is available, never capture, stream or hierarchy.
     let doctor = Command::new(env!("CARGO_BIN_EXE_carlo"))
         .args(["doctor", "--json"])
         .output()
         .unwrap();
     let doctor: Value = serde_json::from_slice(&doctor.stdout).unwrap();
     assert_eq!(hello["capabilities"], doctor["capabilities"]);
-    assert!(
-        hello["capabilities"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .all(|capability| capability["available"] == false)
-    );
+    let available: Vec<&str> = hello["capabilities"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|capability| capability["available"] == true)
+        .map(|capability| capability["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(available, ["serve_protocol"]);
 
     assert_eq!(
         request(&mut stream, 2, r#"{"command":"ping"}"#),
@@ -266,16 +282,31 @@ fn happy_path_handshake_commands_and_shutdown_exit_zero() {
         code(request(&mut stream, 4, &agent.hello_body())),
         "already_initialized"
     );
-    for name in [
-        "hierarchy.dump",
-        "display.info",
-        "video.start",
-        "video.stop",
-        "stats",
-    ] {
+    for name in ["hierarchy.dump", "display.info", "stats"] {
         let body = json!({ "command": name }).to_string();
         assert_eq!(code(request(&mut stream, 5, &body)), "unavailable");
     }
+    // No video channel was attached: the video commands say so and go on.
+    assert_eq!(
+        request(&mut stream, 5, r#"{"command":"channels"}"#),
+        json!({"ok": true, "video": "pending"})
+    );
+    assert_eq!(
+        code(request(&mut stream, 5, r#"{"command":"video.start"}"#)),
+        "video_channel_absent"
+    );
+    assert_eq!(
+        code(request(&mut stream, 5, r#"{"command":"video.stop"}"#)),
+        "not_streaming"
+    );
+    assert_eq!(
+        code(request(
+            &mut stream,
+            5,
+            r#"{"command":"video.start","fps":0}"#
+        )),
+        "invalid_request"
+    );
     assert_eq!(
         code(request(&mut stream, 6, r#"{"command":"SENTINEL_X"}"#)),
         "unknown_command"
@@ -319,7 +350,7 @@ fn requests_fragmented_one_byte_at_a_time_are_reassembled() {
 }
 
 #[test]
-fn socket_is_private_single_use_and_removed_once_the_client_is_accepted() {
+fn socket_is_private_and_removed_once_both_channels_are_attached() {
     let directory = SessionDir::new(0o700);
     let agent = Agent::start(&directory);
     let metadata = fs::symlink_metadata(&agent.socket).unwrap();
@@ -333,7 +364,10 @@ fn socket_is_private_single_use_and_removed_once_the_client_is_accepted() {
 
     let mut stream = agent.connect();
     assert_eq!(request(&mut stream, 1, &agent.hello_body())["ok"], true);
-    // The response proves the accept happened: the path must already be gone.
+    // After the handshake the listener waits for the video channel only.
+    assert!(agent.socket.exists());
+    let _video = agent.attach_video();
+    // The response proves the attachment: the path must already be gone.
     assert!(!agent.socket.exists());
     assert_eq!(directory.entries(), 0);
     assert!(UnixStream::connect(&agent.socket).is_err());
@@ -718,8 +752,21 @@ fn denied_socket_file_falls_back_to_a_random_abstract_socket() {
         let hello = json!({ "command": "hello", "protocol": 1, "session": session }).to_string();
         let code = if round == 0 {
             assert_eq!(request(&mut stream, 1, &hello)["ok"], true);
-            // Accepted: the listener is closed, the name is free, nobody attaches.
+            // The video channel attaches through the same abstract name; then
+            // the listener is closed, the name is free, nobody else attaches.
+            let mut video = UnixStream::connect_addr(&address).unwrap();
+            video.set_read_timeout(Some(PROMPT)).unwrap();
+            let attach =
+                json!({ "command": "attach", "channel": "video", "session": session }).to_string();
+            assert_eq!(
+                request(&mut video, 9, &attach),
+                json!({"ok": true, "channel": "video"})
+            );
             assert!(UnixStream::connect_addr(&address).is_err());
+            assert_eq!(
+                request(&mut stream, 2, r#"{"command":"channels"}"#),
+                json!({"ok": true, "video": "attached"})
+            );
             assert_eq!(
                 request(&mut stream, 2, r#"{"command":"ping"}"#),
                 json!({"ok": true})
@@ -766,4 +813,254 @@ fn denied_socket_file_falls_back_to_a_random_abstract_socket() {
     assert_eq!(exit.code, Some(74));
     let address = SocketAddr::from_abstract_name(name.as_bytes()).unwrap();
     assert!(UnixStream::connect_addr(&address).is_err());
+}
+
+fn channel(stream: &mut UnixStream) -> String {
+    let body = request(stream, 40, r#"{"command":"channels"}"#);
+    assert_eq!(body["ok"], true);
+    body["video"].as_str().unwrap().to_owned()
+}
+
+fn wait_for_channel(stream: &mut UnixStream, expected: &str, within: Duration) {
+    let deadline = Instant::now() + within;
+    while channel(stream) != expected {
+        assert!(Instant::now() < deadline, "channel never became {expected}");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+/// A `ping` that must be answered at once, whatever the video peer is doing.
+fn prompt_ping(stream: &mut UnixStream) {
+    let started = Instant::now();
+    assert_eq!(
+        request(stream, 41, r#"{"command":"ping"}"#),
+        json!({"ok": true})
+    );
+    assert!(
+        started.elapsed() < Duration::from_secs(1),
+        "{:?}",
+        started.elapsed()
+    );
+}
+
+#[test]
+fn video_channel_attaches_to_the_session_and_reports_an_unsupported_profile() {
+    let directory = SessionDir::new(0o700);
+    let agent = Agent::start(&directory);
+    let mut control = agent.connect();
+    assert_eq!(request(&mut control, 1, &agent.hello_body())["ok"], true);
+    assert_eq!(channel(&mut control), "pending");
+    let mut video = agent.attach_video();
+    assert_eq!(channel(&mut control), "attached");
+    assert_eq!(directory.entries(), 0);
+
+    // This host is not the pinned build: nothing is opened, nothing streams.
+    let body = json!({"command": "video.start", "display": 0, "max_width": 360,
+                      "max_height": 640, "fps": 15, "bitrate": 1_500_000,
+                      "encoder": "default"});
+    assert_eq!(
+        request(&mut control, 2, &body.to_string()),
+        json!({"ok": false, "error": {"code": "unavailable", "reason": "unsupported_profile"}})
+    );
+    let code = |value: Value| value["error"]["code"].as_str().unwrap().to_owned();
+    for (request_body, expected) in [
+        (
+            json!({"command": "video.start", "display": 1}),
+            "unsupported_display",
+        ),
+        (
+            json!({"command": "video.start", "encoder": "SENTINEL_ENCODER"}),
+            "unsupported_encoder",
+        ),
+        (
+            json!({"command": "video.start", "bitrate": "SENTINEL_BITRATE"}),
+            "invalid_request",
+        ),
+        (json!({"command": "video.stop"}), "not_streaming"),
+    ] {
+        let text = request_body.to_string();
+        protocol::write_frame(&mut control, Kind::Control, 3, text.as_bytes()).unwrap();
+        let frame = protocol::read_frame(&mut control).unwrap().unwrap();
+        assert!(!String::from_utf8_lossy(&frame.payload).contains("SENTINEL"));
+        assert_eq!(
+            code(serde_json::from_slice(&frame.payload).unwrap()),
+            expected
+        );
+    }
+    // Nothing was written to the video channel, which is agent-to-client only:
+    // a frame from the client closes it, and only it.
+    protocol::write_frame(&mut video, Kind::Control, 5, br#"{"command":"ping"}"#).unwrap();
+    wait_for_channel(&mut control, "closed", PROMPT);
+    match protocol::read_frame(&mut video) {
+        Ok(None) | Err(protocol::Error::Io(_)) => {}
+        other => panic!("expected the video channel to be closed, got {other:?}"),
+    }
+    assert_eq!(
+        code(request(&mut control, 6, r#"{"command":"video.start"}"#)),
+        "video_channel_absent"
+    );
+    prompt_ping(&mut control);
+    assert_eq!(
+        request(&mut control, 7, r#"{"command":"shutdown"}"#),
+        json!({"ok": true})
+    );
+    closed(&mut control);
+    let exit = agent.exit();
+    assert_eq!(exit.code, Some(0));
+    assert!(exit.stderr.is_empty());
+}
+
+#[test]
+fn refused_video_attachments_leave_control_working_and_the_slot_open() {
+    let directory = SessionDir::new(0o700);
+    let agent = Agent::start(&directory);
+    let mut control = agent.connect();
+    assert_eq!(request(&mut control, 1, &agent.hello_body())["ok"], true);
+
+    // A wrong session identifier on the video connection.
+    let mut wrong = agent.connect();
+    let body =
+        json!({"command": "attach", "channel": "video", "session": "f".repeat(32)}).to_string();
+    assert_eq!(
+        request(&mut wrong, 3, &body),
+        json!({"ok": false, "error": {"code": "invalid_session"}})
+    );
+    match protocol::read_frame(&mut wrong) {
+        Ok(None) | Err(protocol::Error::Io(_)) => {}
+        other => panic!("expected the refused connection to be closed, got {other:?}"),
+    }
+    prompt_ping(&mut control);
+    assert_eq!(channel(&mut control), "pending");
+    // The control handshake is not an attachment either.
+    let mut second = agent.connect();
+    assert_eq!(
+        request(&mut second, 4, &agent.hello_body())["error"]["code"],
+        "attach_required"
+    );
+    prompt_ping(&mut control);
+    assert_eq!(channel(&mut control), "pending");
+    assert!(agent.socket.exists());
+
+    // The right session still attaches; then nobody else can.
+    let video = agent.attach_video();
+    assert_eq!(channel(&mut control), "attached");
+    assert!(UnixStream::connect(&agent.socket).is_err());
+    // Control EOF ends the session cleanly and closes the video channel too.
+    drop(control);
+    let mut video = video;
+    closed(&mut video);
+    let exit = agent.exit();
+    assert_eq!(exit.code, Some(0));
+    assert!(!exit.stderr.contains(&"f".repeat(32)));
+}
+
+#[test]
+fn three_refused_attachments_close_the_listener_for_the_session() {
+    let directory = SessionDir::new(0o700);
+    let agent = Agent::start(&directory);
+    let mut control = agent.connect();
+    assert_eq!(request(&mut control, 1, &agent.hello_body())["ok"], true);
+    for _ in 0..3 {
+        let mut refused = agent.connect();
+        assert_eq!(
+            request(&mut refused, 2, r#"{"command":"attach","channel":"video"}"#)["error"]["code"],
+            "invalid_session"
+        );
+    }
+    wait_for_channel(&mut control, "absent", PROMPT);
+    assert!(!agent.socket.exists());
+    assert_eq!(directory.entries(), 0);
+    assert_eq!(
+        request(&mut control, 3, r#"{"command":"video.start"}"#)["error"]["code"],
+        "video_channel_absent"
+    );
+    prompt_ping(&mut control);
+    assert_eq!(
+        request(&mut control, 4, r#"{"command":"shutdown"}"#),
+        json!({"ok": true})
+    );
+    assert_eq!(agent.exit().code, Some(0));
+}
+
+/// The only test that waits for a real deadline: the 10 s attach window, with
+/// a video peer stalled inside its attach frame for the whole time.
+#[test]
+fn absent_video_channel_times_out_while_control_never_waits_for_a_stalled_peer() {
+    let directory = SessionDir::new(0o700);
+    let agent = Agent::start(&directory);
+    let mut control = agent.connect();
+    assert_eq!(request(&mut control, 1, &agent.hello_body())["ok"], true);
+    let started = Instant::now();
+    let mut stalled = agent.connect();
+    stalled.write_all(b"CRLO\x01\x01\x00").unwrap();
+    while started.elapsed() < Duration::from_secs(4) {
+        prompt_ping(&mut control);
+        assert_eq!(channel(&mut control), "pending");
+        assert_eq!(
+            request(&mut control, 2, r#"{"command":"video.start"}"#)["error"]["code"],
+            "video_channel_absent"
+        );
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    // The stalled peer is cut at its 5 s handshake deadline, unanswered.
+    stalled
+        .set_read_timeout(Some(Duration::from_secs(4)))
+        .unwrap();
+    let mut rest = Vec::new();
+    assert!(matches!(stalled.read_to_end(&mut rest), Ok(0) | Err(_)));
+    assert!(rest.is_empty());
+    assert!((Duration::from_secs(4)..Duration::from_secs(8)).contains(&started.elapsed()));
+    assert_eq!(channel(&mut control), "pending");
+    assert!(agent.socket.exists());
+
+    // Nobody attached within 10 s: the listener closes, video is absent for
+    // the rest of the session and control simply goes on.
+    wait_for_channel(&mut control, "absent", Duration::from_secs(8));
+    assert!((Duration::from_secs(9)..Duration::from_secs(13)).contains(&started.elapsed()));
+    assert!(!agent.socket.exists());
+    assert_eq!(directory.entries(), 0);
+    assert!(UnixStream::connect(&agent.socket).is_err());
+    assert_eq!(
+        request(&mut control, 3, r#"{"command":"video.start"}"#)["error"]["code"],
+        "video_channel_absent"
+    );
+    prompt_ping(&mut control);
+    assert_eq!(
+        request(&mut control, 4, r#"{"command":"shutdown"}"#),
+        json!({"ok": true})
+    );
+    assert_eq!(agent.exit().code, Some(0));
+}
+
+#[test]
+fn signal_with_both_channels_attached_closes_both_and_leaves_nothing() {
+    let directory = SessionDir::new(0o700);
+    let agent = Agent::start(&directory);
+    let mut control = agent.connect();
+    assert_eq!(request(&mut control, 1, &agent.hello_body())["ok"], true);
+    let mut video = agent.attach_video();
+    let started = Instant::now();
+    agent.signal("-TERM");
+    closed(&mut control);
+    closed(&mut video);
+    let exit = agent.exit();
+    assert_eq!(exit.code, Some(74));
+    assert!(exit.stderr.contains("interrupted"));
+    assert!(started.elapsed() < Duration::from_secs(3));
+    assert_eq!(directory.entries(), 0);
+
+    // And while the video channel is still pending with a half-open peer.
+    let directory = SessionDir::new(0o700);
+    let agent = Agent::start(&directory);
+    let mut control = agent.connect();
+    assert_eq!(request(&mut control, 1, &agent.hello_body())["ok"], true);
+    let mut stalled = agent.connect();
+    stalled.write_all(b"CR").unwrap();
+    let started = Instant::now();
+    agent.signal("-HUP");
+    closed(&mut control);
+    let exit = agent.exit();
+    assert_eq!(exit.code, Some(74));
+    assert!(started.elapsed() < Duration::from_secs(3));
+    assert_eq!(directory.entries(), 0);
 }

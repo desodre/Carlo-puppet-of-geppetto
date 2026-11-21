@@ -1,21 +1,29 @@
-//! `carlo serve`: one client on one control channel over a private Unix socket.
+//! `carlo serve`: one client on two channels, control and video, over a private
+//! Unix socket. No HTTP, no WebSocket.
 //!
 //! Lifecycle: validate the session directory, bind `control.sock` (0600) or, only
 //! when creating that file is denied, a random abstract-namespace name, print
-//! one ready line with a fresh session identifier, accept exactly one client
-//! within a deadline, remove the socket path, check the peer's kernel
-//! credentials, then answer control frames until `shutdown`, EOF or a failure.
+//! one ready line with a fresh session identifier, accept the control client
+//! within a deadline, check the peer's kernel credentials, then answer control
+//! frames until `shutdown`, EOF or a failure. After the control handshake the
+//! same listener admits exactly one more connection, the video channel, bound to
+//! the session by its identifier; the listener is closed (and the socket path
+//! removed) as soon as that channel is attached or its deadline passed.
 //! Everything Carlo created is removed on every exit path; the directory belongs
 //! to the host and is never touched. The contract is `docs/protocol.md`.
 //!
-//! No second channel, data command or reconnection exists here.
+//! The control loop runs on the thread that called [`run`] and never touches
+//! the video connection; see `video.rs` for the other threads. No reconnection
+//! and no second client exist here.
 
 mod control;
 mod socket;
+mod video;
 
 use std::fmt;
 use std::io::{self, Read, Write};
 use std::path::Path;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
@@ -23,10 +31,12 @@ use serde::Serialize;
 use crate::diagnostics::Diagnostics;
 use crate::error::CarloError;
 use crate::protocol::{self, Kind, VERSION};
+use crate::video::stream::Mirror;
 use control::{Control, Next};
 use socket::{BoundedStream, ControlSocket, Ended, STOP, Signals};
+use video::{Timings, Video};
 
-/// How long the socket waits for its single client.
+/// How long the socket waits for its control client.
 const ACCEPT_DEADLINE: Duration = Duration::from_secs(30);
 /// Time from accept to a successful `hello`, however the bytes are fragmented.
 const HANDSHAKE_DEADLINE: Duration = Duration::from_secs(30);
@@ -157,6 +167,8 @@ pub fn run(session_dir: &str, output: &mut impl Write) -> Result<(), CarloError>
     let own_uid = socket::effective_uid();
     socket::validate_directory(directory, own_uid)?;
     let diagnostics = Diagnostics::collect()?;
+    // The profile gate only; no library is opened and no Binder call is made.
+    let source = Arc::new(Mirror::detect(&diagnostics)?);
     // Installed before anything is created, so a signal always reaches cleanup.
     let _signals = Signals::install()?;
     let listener = ControlSocket::bind(directory)?;
@@ -175,16 +187,27 @@ pub fn run(session_dir: &str, output: &mut impl Write) -> Result<(), CarloError>
     writeln!(output).map_err(CarloError::output)?;
     output.flush().map_err(CarloError::output)?;
 
-    // Consumes the listener: it is closed and its path removed before any byte
-    // of the client is read, whether or not a client arrived.
-    let stream = listener.accept_one(ACCEPT_DEADLINE, &STOP)?;
+    // The listener outlives this accept only to admit the video channel after a
+    // successful handshake; every early return below drops (closes) it.
+    let stream = listener.accept(ACCEPT_DEADLINE, &STOP)?;
     let peer = socket::peer_credentials(&stream)?;
     if !socket::peer_allowed(peer.uid, own_uid, cfg!(target_os = "android")) {
         return Err(Error::PeerRejected { uid: peer.uid }.into());
     }
     let mut stream = BoundedStream::new(stream, &STOP).map_err(Error::Transport)?;
-    let mut control = Control::new(session, &diagnostics);
-    converse(&mut stream, &mut control, HANDSHAKE_DEADLINE, IDLE_DEADLINE)?;
+    let mut control = Control::new(session, &diagnostics, Video::new(source, Timings::DEFAULT));
+    let ended = converse(
+        &mut stream,
+        &mut control,
+        HANDSHAKE_DEADLINE,
+        IDLE_DEADLINE,
+        Some(listener),
+    );
+    // Whatever ended control ends the session: stop the stream (display released,
+    // encoder drained), close the video channel and the listener, then control.
+    control.teardown();
+    drop(stream);
+    ended?;
     Ok(())
 }
 
@@ -199,12 +222,15 @@ fn random_hex() -> Result<String, Error> {
 }
 
 /// Answer frames until the session ends. `Ok` means `shutdown` or a clean close
-/// after the handshake.
+/// after the handshake. `listener` is handed to the video channel once, right
+/// after the response to the successful `hello`; if the handshake never
+/// succeeds it is dropped here, with nobody else admitted.
 fn converse(
     stream: &mut BoundedStream<'_>,
     control: &mut Control,
     handshake: Duration,
     idle: Duration,
+    mut listener: Option<ControlSocket>,
 ) -> Result<(), Error> {
     // One absolute deadline covers everything an unauthenticated peer can send.
     let handshake_deadline = Instant::now() + handshake;
@@ -228,6 +254,9 @@ fn converse(
                 let reply = control.handle(&frame);
                 drop(frame);
                 send(stream, reply.request_id, &reply.payload)?;
+                if let Some(listener) = listener.take_if(|_| control.initialized()) {
+                    control.listen(listener);
+                }
                 match reply.next {
                     Next::Continue => {}
                     Next::Shutdown => return Ok(()),
@@ -281,9 +310,9 @@ mod tests {
         let (server, peer) = UnixStream::pair().unwrap();
         let client = std::thread::spawn(move || client(peer));
         let diagnostics = Diagnostics::from_environment("linux", "x86_64", None, None, None, None);
-        let mut control = Control::new(SESSION.into(), &diagnostics);
+        let mut control = Control::new(SESSION.into(), &diagnostics, Video::unattached());
         let mut stream = BoundedStream::new(server, stop).unwrap();
-        let result = converse(&mut stream, &mut control, handshake, idle);
+        let result = converse(&mut stream, &mut control, handshake, idle, None);
         drop(stream);
         client.join().unwrap();
         result

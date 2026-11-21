@@ -9,8 +9,10 @@ Arquitetura escolhida: Binder + NDK, executando como usuário `shell` por meio d
 **Estado atual:** fundação nativa, lookup Binder e bootstrap de sessão de
 acessibilidade validados no emulador de referência API 34 x86_64. Registro, callback
 `init` e unregister funcionam sem Java. Hierarquia e captura ainda não estão
-implementadas; do protocolo existem o framing e um canal de controle com
-handshake (`serve`), validados apenas no host. Versão de desenvolvimento:
+implementadas; do protocolo existem o framing, um canal de controle com
+handshake e um canal de vídeo vinculado à mesma sessão (`serve`). O stream de
+vídeo só existe no único build fixado do espelhamento de display, onde foi
+executado por este caminho. Versão de desenvolvimento:
 `0.1.0`, sem release publicada do agente completo.
 
 ## Propósito
@@ -95,23 +97,44 @@ Doctor no host produz JSON e retorna **69** porque não é um runtime Android.
 No emulador, verifica a fundação e informa explicitamente capacidades ainda
 indisponíveis.
 
-`serve --session-dir <dir>` abre um único canal de controle (#31, #32): valida o
+`serve --session-dir <dir>` abre o canal de controle (#31, #32): valida o
 diretório (absoluto, real, do próprio usuário, modo 0700), cria `control.sock`
 (0600), imprime uma linha JSON de prontidão com o identificador de sessão, aceita
 exatamente um cliente do mesmo UID e responde `hello`, `ping`, `capabilities` e
-`shutdown`. Hierarquia, vídeo, `stats` e segundo canal ainda não existem: esses
-comandos respondem `unavailable` e a capacidade `serve_protocol` do doctor
-continua `false`. Se a plataforma negar a criação do arquivo de socket (visto em
+`shutdown`. Hierarquia e `stats` ainda não existem e respondem `unavailable`.
+
+Depois do `hello`, o mesmo socket admite mais uma única conexão, o canal de
+vídeo (#30, #35): credenciais do par antes de qualquer leitura e um quadro
+`{"command":"attach","channel":"video","session":"<hex>"}` em até 5 s, dentro
+de uma janela de 10 s; depois disso o listener é fechado. Sem canal de vídeo a
+sessão segue só com controle. `channels` informa o estado; `video.start`
+(#44, #51: display 0, tamanho máximo, fps, bitrate, encoder `default`) responde
+a configuração aceita, a geração e o codec; `video.stop` responde o motivo e
+contadores. Os pacotes de vídeo (#46) têm cabeçalho de 24 bytes com tipo, flag
+de keyframe, geração, PTS e dimensões: `config` (SPS/PPS) antes do primeiro
+`media`, que é um keyframe, e `end` fechando cada geração. O controle nunca
+espera pelo par de vídeo: um consumidor parado encerra apenas o stream e o canal
+de vídeo. O stream só funciona no build fixado do espelhamento
+(Samsung a16x API 36 arm64, shell); em qualquer outro alvo, inclusive o host e a
+referência API 34, `video.start` responde `unavailable` e as capacidades
+`display_capture` e `h264_stream` do doctor ficam `false`; `serve_protocol`
+passa a `true`. Se a plataforma negar a criação do arquivo de socket (visto em
 Samsung API 36: `EACCES` em diretório 0700 do shell), o agente usa um socket
 abstrato `carlo-<32 hex>` aleatório e informa `"transport":"abstract"` na linha
 de prontidão; a checagem de credenciais do par, o cliente único e o identificador
 de sessão passam a ser todo o controle de acesso. Contrato em
-[docs/protocol.md](docs/protocol.md). Validado no host; nenhuma sessão completa
-foi executada em dispositivo ainda (`tools/smoke_serve.py` expõe com
-`adb forward` `localfilesystem:` ou `localabstract:` conforme o transporte).
+[docs/protocol.md](docs/protocol.md). `tools/smoke_serve.py` expõe com
+`adb forward` `localfilesystem:` ou `localabstract:` conforme o transporte.
+`tools/smoke_video_stream.py` prova os dois canais, duas gerações de stream,
+`ping` respondido em até 1 s durante o stream e a decodificação no host com
+ffprobe; o stream é conteúdo real da tela, fica só em memória/diretório
+temporário privado e é sempre apagado. O canal de vídeo e o stream foram
+executados no build fixado; evidência em
+[docs/validation/p3-video-channel.md](docs/validation/p3-video-channel.md).
 
 ```sh
 python3 tools/smoke_serve.py --serial emulator-5554 --manifest dist/manifest.json
+python3 tools/smoke_video_stream.py --serial <serial> --allow-physical
 ```
 
 ```sh

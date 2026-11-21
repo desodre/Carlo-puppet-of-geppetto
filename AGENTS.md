@@ -53,6 +53,10 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md), [PLANO.md](PLANO.md) and the relevant i
   the session directory is preferred; the abstract fallback applies only when bind
   is denied (the executed Samsung build refuses socket files under /data/local/tmp).
   Never report a capability the doctor source does not; never log the session id.
+  The video channel attaches with the same session id inside a bounded window and is
+  agent-to-client only; control must never block on the video peer. Mirror FFI owners
+  live and die on the stream thread. `display_capture`/`h264_stream` are available
+  only when the exact mirror profile gate passes. Streams are real screen contents.
 - Stdout is command data; errors/diagnostics go to stderr. Never log UI contents or secrets.
 
 ## Workflow

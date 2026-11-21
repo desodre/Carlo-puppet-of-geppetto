@@ -16,7 +16,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import smoke_serve
+import serve_session
 from android_session import LAUNCH, ROOT, SessionError
 from carlo_protocol import CONTROL, ControlClient, ProtocolError, encode, read_frame
 from smoke_serve import (
@@ -41,7 +41,7 @@ def hello_response(**device):
     return {
         "ok": True, "protocol": 1, "agent": {"name": "carlo", "version": "0.1.0"},
         "device": {"android_api": 34, "abi": "x86_64", "architecture": "x86_64", **device},
-        "capabilities": [{"name": "serve_protocol", "available": False, "reason": "r"}],
+        "capabilities": [{"name": "serve_protocol", "available": True, "reason": "r"}],
         "limits": {"control_bytes": 65536, "payload_bytes": 8388608},
     }
 
@@ -55,9 +55,11 @@ def case(name, transport="filesystem", **changes):
               "forward_removed": True, "cleanup_removed": True,
               "socket_present_after_exit": False, "exit_code": 0 if CASES[name][1] else 74}
     if name == "complete":
-        result.update({"hello_ok": True, "capabilities": 4, "capabilities_available": 0,
-                       "socket_removed_after_accept": True, "reserved_unavailable": 5,
-                       "unknown_kind_recovered": True, "requests": 12})
+        result.update({"hello_ok": True, "capabilities": 4, "capabilities_available": 1,
+                       "serve_protocol_available": True,
+                       "video_without_channel": "video_channel_absent",
+                       "reserved_unavailable": 3,
+                       "unknown_kind_recovered": True, "requests": 13})
     else:
         result.update({"rejected": {"wrong_session": "invalid_session"}.get(name, name),
                        "closed": True})
@@ -235,9 +237,9 @@ class ParsingTests(unittest.TestCase):
             with self.assertRaises(SessionError):
                 validate_summary(broken)
         for index, change in [
-            (0, {"hello_ok": False}), (0, {"capabilities_available": 1}),
-            (0, {"socket_removed_after_accept": False}), (0, {"unknown_kind_recovered": False}),
-            (0, {"reserved_unavailable": 4}), (0, {"exit_code": 74}), (1, {"exit_code": 0}),
+            (0, {"hello_ok": False}), (0, {"serve_protocol_available": False}),
+            (0, {"video_without_channel": None}), (0, {"unknown_kind_recovered": False}),
+            (0, {"reserved_unavailable": 2}), (0, {"exit_code": 74}), (1, {"exit_code": 0}),
             (1, {"rejected": "bad_magic"}), (2, {"rejected": None}),
             (2, {"forward_removed": False}), (1, {"cleanup_removed": False}),
             (0, {"socket_present_after_exit": True}), (2, {"session_id_length": 16}),
@@ -263,7 +265,7 @@ class CleanupTests(unittest.TestCase):
 
     def test_refused_connection_is_an_exposure_failure_and_everything_is_released(self):
         adb = FakeAdb()
-        with patch.object(smoke_serve.socket, "create_connection",
+        with patch.object(serve_session.socket, "create_connection",
                           side_effect=ConnectionRefusedError(111, "refused")):
             with self.assertRaises(ExposureError) as raised:
                 serve_case(adb, self.binary, self.device, "complete")
@@ -279,7 +281,7 @@ class CleanupTests(unittest.TestCase):
     def test_forward_that_reaches_nothing_reports_eof_and_is_never_worked_around(self):
         adb, (ours, theirs) = FakeAdb(), socket.socketpair()
         theirs.close()
-        with patch.object(smoke_serve.socket, "create_connection", return_value=ours):
+        with patch.object(serve_session.socket, "create_connection", return_value=ours):
             result, failure = run_with(adb)
         self.assertIsInstance(failure, ExposureError)
         self.assertEqual(result["filesystem_socket_exposed"], False)
@@ -292,7 +294,7 @@ class CleanupTests(unittest.TestCase):
     def test_abstract_transport_is_forwarded_by_name_without_file_checks(self):
         adb = FakeAdb(output=ready_line(transport="abstract", socket=ABSTRACT),
                       socket_file=False)
-        with patch.object(smoke_serve.socket, "create_connection",
+        with patch.object(serve_session.socket, "create_connection",
                           side_effect=ConnectionRefusedError(111, "refused")):
             with self.assertRaises(ExposureError) as raised:
                 serve_case(adb, self.binary, self.device, "complete")
@@ -380,13 +382,14 @@ class HostBinaryTests(unittest.TestCase):
 
     def test_complete_session_exits_zero(self):
         process, client, ready = self.start()
-        result = exercise_complete(
-            client, ready["session"], None, None, lambda: os.path.exists(ready["socket"])
-        )
-        self.assertEqual(result["capabilities_available"], 0)
-        self.assertTrue(result["socket_removed_after_accept"])
+        result = exercise_complete(client, ready["session"], None, None)
+        # Off the pinned device only the protocol itself is available.
+        self.assertEqual(result["capabilities_available"], 1)
+        self.assertEqual(result["video_without_channel"], "video_channel_absent")
+        self.assertEqual(result["reserved_unavailable"], 3)
         self.assertEqual(process.wait(10), 0)
         self.assertEqual(process.stderr.read(), b"")
+        self.assertFalse(os.path.exists(ready["socket"]))
 
     def test_rejections_close_and_exit_non_zero_without_leaking_the_session(self):
         for exercise in (exercise_wrong_session, exercise_bad_magic):

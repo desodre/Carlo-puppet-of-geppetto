@@ -1,0 +1,130 @@
+{
+  "description": "Video packet vectors (payload of a kind-3 frame) shared by src/protocol.rs and tools/carlo_protocol.py. Synthetic data only.",
+  "packets": [
+    {
+      "name": "config",
+      "payload_hex": "0100000000000001000000000000000001680280000000000000000167420000000168ce",
+      "type": 1,
+      "key_frame": false,
+      "generation": 1,
+      "pts_us": 0,
+      "width": 360,
+      "height": 640,
+      "data_hex": "0000000167420000000168ce"
+    },
+    {
+      "name": "media_key_frame",
+      "payload_hex": "0201000000000001000000000001046a016802800000000000000001658884",
+      "type": 2,
+      "key_frame": true,
+      "generation": 1,
+      "pts_us": 66666,
+      "width": 360,
+      "height": 640,
+      "data_hex": "00000001658884"
+    },
+    {
+      "name": "media_delta_large_pts",
+      "payload_hex": "020000000000000200000001000000000780043800000000000001419a",
+      "type": 2,
+      "key_frame": false,
+      "generation": 2,
+      "pts_us": 4294967296,
+      "width": 1920,
+      "height": 1080,
+      "data_hex": "000001419a"
+    },
+    {
+      "name": "media_negative_pts_last_generation",
+      "payload_hex": "02000000ffffffffffffffffffffffff001000100000000000000141",
+      "type": 2,
+      "key_frame": false,
+      "generation": 4294967295,
+      "pts_us": -1,
+      "width": 16,
+      "height": 16,
+      "data_hex": "00000141"
+    },
+    {
+      "name": "end",
+      "payload_hex": "030000000000000100000000000000000168028000000000",
+      "type": 3,
+      "key_frame": false,
+      "generation": 1,
+      "pts_us": 0,
+      "width": 360,
+      "height": 640,
+      "data_hex": ""
+    },
+    {
+      "name": "empty",
+      "payload_hex": "",
+      "error": "truncated_packet"
+    },
+    {
+      "name": "truncated_header",
+      "payload_hex": "0300000000000001000000000000000001680280000000",
+      "error": "truncated_packet"
+    },
+    {
+      "name": "type_zero",
+      "payload_hex": "000000000000000100000000000000000168028000000000",
+      "error": "unknown_packet_type"
+    },
+    {
+      "name": "type_four",
+      "payload_hex": "04000000000000010000000000000000016802800000000000",
+      "error": "unknown_packet_type"
+    },
+    {
+      "name": "unknown_flag_bit",
+      "payload_hex": "020200000000000100000000000000050168028000000000000001419a",
+      "error": "packet_reserved_bits"
+    },
+    {
+      "name": "reserved_after_flags",
+      "payload_hex": "02010001000000010000000000000005016802800000000000000001658884",
+      "error": "packet_reserved_bits"
+    },
+    {
+      "name": "reserved_tail",
+      "payload_hex": "030000000000000100000000000000000168028000000001",
+      "error": "packet_reserved_bits"
+    },
+    {
+      "name": "key_flag_on_config",
+      "payload_hex": "0101000000000001000000000000000001680280000000000000000167420000000168ce",
+      "error": "invalid_packet"
+    },
+    {
+      "name": "pts_on_config",
+      "payload_hex": "0100000000000001000000000000000701680280000000000000000167420000000168ce",
+      "error": "invalid_packet"
+    },
+    {
+      "name": "pts_on_end",
+      "payload_hex": "030000000000000100000000000000070168028000000000",
+      "error": "invalid_packet"
+    },
+    {
+      "name": "data_after_end",
+      "payload_hex": "03000000000000010000000000000000016802800000000000",
+      "error": "invalid_packet"
+    },
+    {
+      "name": "empty_config",
+      "payload_hex": "010000000000000100000000000000000168028000000000",
+      "error": "invalid_packet"
+    },
+    {
+      "name": "empty_media",
+      "payload_hex": "020100000000000100000000000000000168028000000000",
+      "error": "invalid_packet"
+    },
+    {
+      "name": "generation_zero",
+      "payload_hex": "020000000000000000000000000000000168028000000000000001419a",
+      "error": "invalid_packet"
+    }
+  ]
+}

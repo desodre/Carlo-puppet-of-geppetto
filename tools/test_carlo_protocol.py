@@ -2,12 +2,17 @@
 
 import io
 import json
+import socket
 import unittest
 from pathlib import Path
 
-from carlo_protocol import CONTROL, VIDEO, Frame, ProtocolError, encode, read_frame
+from carlo_protocol import (
+    CONTROL, END, MEDIA, VIDEO, Frame, ProtocolError, VideoChannel, VideoPacket,
+    decode_video_packet, encode, encode_video_packet, read_frame,
+)
 
 FIXTURES = Path(__file__).resolve().parent.parent / "tests/fixtures/protocol_frames.json"
+PACKETS = FIXTURES.with_name("video_packets.json")
 
 
 class Trickle(io.RawIOBase):
@@ -64,6 +69,61 @@ class ProtocolTests(unittest.TestCase):
         self.assertTrue(raised.exception.recoverable)
         self.assertEqual(read_frame(stream), Frame(VIDEO, 8, b"\x00\x00\x01"))
         self.assertIsNone(read_frame(stream))
+
+    def test_shared_video_packet_vectors_decode_and_reencode_identically(self):
+        packets = json.loads(PACKETS.read_text(encoding="utf-8"))["packets"]
+        self.assertGreaterEqual(len(packets), 12)
+        for case in packets:
+            with self.subTest(case["name"]):
+                payload = bytes.fromhex(case["payload_hex"])
+                if "error" in case:
+                    with self.assertRaises(ProtocolError) as raised:
+                        decode_video_packet(payload)
+                    self.assertEqual(raised.exception.code, case["error"])
+                    continue
+                packet = decode_video_packet(payload)
+                self.assertEqual(packet, VideoPacket(
+                    case["type"], case["key_frame"], case["generation"], case["pts_us"],
+                    case["width"], case["height"], bytes.fromhex(case["data_hex"])))
+                self.assertEqual(encode_video_packet(packet), payload)
+
+    def test_video_channel_attaches_then_only_reads_packets(self):
+        ours, theirs = socket.socketpair()
+        channel = VideoChannel(ours, timeout=2)
+        media = VideoPacket(MEDIA, True, 3, 40, 360, 640, b"\x00\x00\x01\x65")
+        end = VideoPacket(END, False, 3, 0, 360, 640, b"")
+        theirs.sendall(encode(CONTROL, 9, b'{"ok":true,"channel":"video"}')
+                       + encode(VIDEO, 21, encode_video_packet(media))
+                       + encode(VIDEO, 21, encode_video_packet(end))
+                       + encode(CONTROL, 0, b"{}"))
+        self.assertEqual(channel.attach("ab" * 16, request_id=9),
+                         {"ok": True, "channel": "video"})
+        sent = read_frame(theirs.makefile("rb"))
+        self.assertEqual((sent.kind, sent.request_id), (CONTROL, 9))
+        self.assertEqual(json.loads(sent.payload),
+                         {"command": "attach", "channel": "video", "session": "ab" * 16})
+        self.assertEqual(channel.receive(), (21, media))
+        self.assertEqual(channel.receive(), (21, end))
+        with self.assertRaises(ProtocolError) as raised:
+            channel.receive()
+        self.assertEqual(raised.exception.code, "unexpected_kind")
+        theirs.close()
+        self.assertIsNone(channel.receive())
+        channel.close()
+        # A refused attach is the agent closing, or answering with another ID.
+        ours, theirs = socket.socketpair()
+        channel = VideoChannel(ours, timeout=2)
+        theirs.shutdown(socket.SHUT_WR)
+        self.assertIsNone(channel.attach("ab" * 16))
+        channel.close()
+        theirs.close()
+        ours, theirs = socket.socketpair()
+        channel = VideoChannel(ours, timeout=2)
+        theirs.sendall(encode(CONTROL, 2, b"{}"))
+        with self.assertRaises(ProtocolError):
+            channel.attach("ab" * 16, request_id=1)
+        channel.close()
+        theirs.close()
 
 
 if __name__ == "__main__":

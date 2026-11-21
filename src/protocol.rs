@@ -313,6 +313,141 @@ pub fn write_frame(
     Ok(())
 }
 
+/// Fixed size of the header that starts every [`Kind::Video`] payload.
+pub const VIDEO_HEADER_LEN: usize = 24;
+
+/// Packet types carried by video-kind frames on the video channel.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
+pub enum VideoPacketKind {
+    /// Codec configuration (Annex B SPS/PPS) exactly as the encoder emitted it.
+    Config = 1,
+    /// One encoder output buffer (Annex B).
+    Media = 2,
+    /// The generation ended; no data follows the header.
+    End = 3,
+}
+
+/// The 24-byte big-endian header of one video packet:
+///
+/// | Offset | Size | Field                                              |
+/// |-------:|-----:|----------------------------------------------------|
+/// |      0 |    1 | packet type ([`VideoPacketKind`])                  |
+/// |      1 |    1 | flags: bit 0 key frame; other bits zero            |
+/// |      2 |    2 | reserved, zero                                     |
+/// |      4 |    4 | stream generation (u32, from 1)                    |
+/// |      8 |    8 | PTS in microseconds (i64; 0 for config and end)    |
+/// |     16 |    2 | width (u16)                                        |
+/// |     18 |    2 | height (u16)                                       |
+/// |     20 |    4 | reserved, zero                                     |
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct VideoPacket {
+    /// Packet type.
+    pub kind: VideoPacketKind,
+    /// Whether a media packet holds a key frame (IDR); false for other types.
+    pub key_frame: bool,
+    /// Stream generation this packet belongs to; never zero.
+    pub generation: u32,
+    /// Presentation time in microseconds; zero for config and end.
+    pub pts_us: i64,
+    /// Encoder output width in pixels.
+    pub width: u16,
+    /// Encoder output height in pixels.
+    pub height: u16,
+}
+
+/// Why a video payload is not a valid packet.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VideoPacketError {
+    /// Fewer than [`VIDEO_HEADER_LEN`] bytes.
+    Truncated,
+    /// The type byte is not 1, 2 or 3.
+    UnknownType,
+    /// A reserved flag bit or reserved byte is not zero.
+    ReservedBits,
+    /// The fields contradict the packet type (key flag or PTS outside media,
+    /// data after end, empty config or media, generation zero).
+    Invalid,
+}
+
+impl VideoPacketError {
+    /// Stable identifier, shared with `tools/carlo_protocol.py`.
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::Truncated => "truncated_packet",
+            Self::UnknownType => "unknown_packet_type",
+            Self::ReservedBits => "packet_reserved_bits",
+            Self::Invalid => "invalid_packet",
+        }
+    }
+}
+
+impl fmt::Display for VideoPacketError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "video packet: {}", self.code())
+    }
+}
+
+impl std::error::Error for VideoPacketError {}
+
+impl VideoPacket {
+    /// Largest data that fits one video frame after the packet header.
+    pub const MAX_DATA: usize = BULK_LIMIT as usize - VIDEO_HEADER_LEN;
+    const KEY_FRAME: u8 = 1;
+
+    /// The header bytes; the caller appends the data.
+    pub fn encode(&self) -> [u8; VIDEO_HEADER_LEN] {
+        let mut header = [0_u8; VIDEO_HEADER_LEN];
+        header[0] = self.kind as u8;
+        header[1] = if self.key_frame { Self::KEY_FRAME } else { 0 };
+        header[4..8].copy_from_slice(&self.generation.to_be_bytes());
+        header[8..16].copy_from_slice(&self.pts_us.to_be_bytes());
+        header[16..18].copy_from_slice(&self.width.to_be_bytes());
+        header[18..20].copy_from_slice(&self.height.to_be_bytes());
+        header
+    }
+
+    /// Split a video payload into its validated header and the data after it.
+    ///
+    /// # Errors
+    /// Returns [`VideoPacketError`] when the payload is shorter than the header,
+    /// names an unknown type, sets a reserved bit or contradicts its own type.
+    pub fn decode(payload: &[u8]) -> Result<(Self, &[u8]), VideoPacketError> {
+        let Some((header, data)) = payload.split_first_chunk::<VIDEO_HEADER_LEN>() else {
+            return Err(VideoPacketError::Truncated);
+        };
+        let kind = match header[0] {
+            1 => VideoPacketKind::Config,
+            2 => VideoPacketKind::Media,
+            3 => VideoPacketKind::End,
+            _ => return Err(VideoPacketError::UnknownType),
+        };
+        if header[1] & !Self::KEY_FRAME != 0 || header[2..4] != [0; 2] || header[20..] != [0; 4] {
+            return Err(VideoPacketError::ReservedBits);
+        }
+        let packet = Self {
+            kind,
+            key_frame: header[1] & Self::KEY_FRAME != 0,
+            generation: u32::from_be_bytes([header[4], header[5], header[6], header[7]]),
+            pts_us: i64::from_be_bytes([
+                header[8], header[9], header[10], header[11], header[12], header[13], header[14],
+                header[15],
+            ]),
+            width: u16::from_be_bytes([header[16], header[17]]),
+            height: u16::from_be_bytes([header[18], header[19]]),
+        };
+        let media = kind == VideoPacketKind::Media;
+        let consistent = packet.generation != 0
+            && (media || (!packet.key_frame && packet.pts_us == 0))
+            && (kind == VideoPacketKind::End) == data.is_empty();
+        if consistent {
+            Ok((packet, data))
+        } else {
+            Err(VideoPacketError::Invalid)
+        }
+    }
+}
+
 fn truncated(expected: u64, received: u64) -> Error {
     // Both values are bounded by HEADER_LEN or a u32 payload length.
     Error::Truncated {
@@ -423,6 +558,42 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn shared_video_packet_vectors_decode_and_reencode_identically() {
+        let fixtures: serde_json::Value =
+            serde_json::from_str(include_str!("../tests/fixtures/video_packets.json")).unwrap();
+        let packets = fixtures["packets"].as_array().unwrap();
+        assert!(packets.len() >= 12);
+        for case in packets {
+            let name = case["name"].as_str().unwrap();
+            let payload = unhex(case["payload_hex"].as_str().unwrap());
+            let result = VideoPacket::decode(&payload);
+            if let Some(code) = case["error"].as_str() {
+                assert_eq!(result.unwrap_err().code(), code, "{name}");
+                continue;
+            }
+            let (packet, data) = result.unwrap();
+            assert_eq!(packet.kind as u64, case["type"].as_u64().unwrap(), "{name}");
+            assert_eq!(packet.key_frame, case["key_frame"].as_bool().unwrap());
+            assert_eq!(
+                u64::from(packet.generation),
+                case["generation"].as_u64().unwrap()
+            );
+            assert_eq!(packet.pts_us, case["pts_us"].as_i64().unwrap(), "{name}");
+            assert_eq!(u64::from(packet.width), case["width"].as_u64().unwrap());
+            assert_eq!(u64::from(packet.height), case["height"].as_u64().unwrap());
+            assert_eq!(data, unhex(case["data_hex"].as_str().unwrap()), "{name}");
+            let mut encoded = packet.encode().to_vec();
+            encoded.extend_from_slice(data);
+            assert_eq!(encoded, payload, "{name}");
+        }
+        // The largest data still fits one video frame together with its header.
+        assert_eq!(
+            VideoPacket::MAX_DATA + VIDEO_HEADER_LEN,
+            Kind::Video.max_payload() as usize
+        );
     }
 
     #[test]
