@@ -172,8 +172,10 @@ id. Children are in the order the parent lists them.
 | 17 | `bounds` | `[left,top][right,bottom]`, bounds in screen, as the app reported them |
 
 Window root nodes carry four more, after `bounds`: `window-id`, `display-id`,
-`window-type` (the numeric `AccessibilityWindowInfo.TYPE_*` value, 1..7) and
-`window-layer`.
+`window-type` (the numeric `AccessibilityWindowInfo.TYPE_*` value: -1 for an
+unmapped WindowManager type, or 1..7) and `window-layer`. The -1 comes from the
+default branch of `AccessibilityWindowManager.updateWindowsLocked` in the device's
+`services.jar`, which keeps the raw WindowManager type only in Samsung's `mRawType`.
 
 Structural nodes without text are kept. Unlike `uiautomator dump`, nodes that
 are not visible to the user are **not** filtered out.

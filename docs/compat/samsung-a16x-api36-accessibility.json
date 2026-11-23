@@ -268,7 +268,8 @@
       },
       {
         "name": "type",
-        "wire": "i32, 1..7"
+        "wire": "i32, -1 (unmapped WindowManager type) or 1..7",
+        "source": "services.jar AccessibilityWindowManager.updateWindowsLocked: the default branch for an unmapped WindowManager type calls setType(-1) and semSetRawType(<raw type>), observed for ty=2634 (Samsung Pay HintService) on Samsung Home"
       },
       {
         "name": "layer",

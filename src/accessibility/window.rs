@@ -19,7 +19,10 @@ const MAX_CHILD_WINDOWS: usize = 256;
 #[derive(Clone, PartialEq, Eq)]
 pub(super) struct Window {
     pub(super) display_id: i32,
-    /// `AccessibilityWindowInfo.TYPE_*`, 1..=7.
+    /// `AccessibilityWindowInfo.TYPE_*`, 1..=7, or -1 when the WindowManager
+    /// type has no accessibility mapping: the default branch of
+    /// `AccessibilityWindowManager.updateWindowsLocked` (device services.jar)
+    /// sets `setType(-1)` and keeps the raw type in Samsung's `mRawType`.
     pub(super) kind: i32,
     pub(super) layer: i32,
     pub(super) id: i32,
@@ -130,7 +133,7 @@ impl<'a> Reader<'a> {
     fn window(&mut self) -> Result<Window, Error> {
         let display_id = self.int("display_id")?;
         let kind = self.int("type")?;
-        if !(1..=7).contains(&kind) {
+        if kind != -1 && !(1..=7).contains(&kind) {
             return Err(bad("type", "range"));
         }
         let layer = self.int("layer")?;
@@ -398,6 +401,21 @@ mod tests {
     }
 
     #[test]
+    fn unmapped_window_type_is_accepted_and_neighbours_are_rejected() {
+        // Samsung Home's HintService window (raw type 2634) reaches the list
+        // as TYPE -1 with the raw type in the trailing mRawType.
+        let mut unmapped = Spec::new(0, 11, 5);
+        unmapped.kind = -1;
+        let displays = decode(&reply(&[(0, vec![unmapped])])).unwrap().unwrap();
+        assert_eq!(displays[0].windows[0].kind, -1);
+        for kind in [0, 8, -2] {
+            let mut spec = Spec::new(0, 11, 5);
+            spec.kind = kind;
+            assert_eq!(field(decode(&reply(&[(0, vec![spec])]))), ("type", "range"));
+        }
+    }
+
+    #[test]
     fn empty_lists_and_null_presence_are_distinct_valid_answers() {
         assert_eq!(decode(&int(0)).unwrap(), None);
         assert_eq!(decode(&reply(&[])).unwrap(), Some(Vec::new()));
@@ -437,6 +455,7 @@ mod tests {
         );
         assert_eq!(field(decode(&patch(window + 4, 0))), ("type", "range"));
         assert_eq!(field(decode(&patch(window + 4, 8))), ("type", "range"));
+        assert_eq!(field(decode(&patch(window + 4, -2))), ("type", "range"));
         // Region: not a multiple of four, over the bound, negative, inverted.
         assert_eq!(
             field(decode(&patch(window + 28, 6))),
