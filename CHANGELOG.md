@@ -2,6 +2,53 @@
 
 ## Unreleased
 
+- Pin the AOSP API 34 `x86_64` emulator hierarchy profile (`reference_api34`)
+  for `hierarchy-probe`, `hierarchy-dump`, `hierarchy-tests`, and `carlo serve`
+  `hierarchy.dump`. Contracts verified against the API 34 system image's
+  `framework.jar` and `services.jar` (`docs/compat/api34-accessibility.json`):
+  - `SERVICE_INFO_API34_HIERARCHY` adds `RETRIEVE_INTERACTIVE_WINDOWS` (22 fields).
+  - `window::Layout::AospApi34` decodes 14-field `AccessibilityWindowInfo` without
+    Samsung's trailing `mRawType`.
+  - `node::decode34` decodes the 45-bit API 34 `AccessibilityNodeInfo` layout
+    (without `mHasIntent`, 4-field `CollectionInfo`, 8-field `CollectionItemInfo`,
+    and pinned bit-40 `TouchDelegateInfo`).
+  - `node::text_hierarchy` and `window::skip_window_title` consume pinned
+    `TextUtils` span kinds `1..=29` (except `22` `EasyEditSpan` / unpinned `30+`,
+    with API 34 vs API 36 layouts for `SuggestionSpan` and `TtsSpan`
+    `PersistableBundle`), keeping `P1` `node::decode` span-strict.
+  - Validated end-to-end on the API 34 `x86_64` emulator (`carlo_api34`: `doctor`,
+    `hierarchy-probe` on Home and Settings, serialized native `android_snapshot`
+    plus 8-cycle resource check, `tools/smoke_serve.py --allow-hierarchy`, and
+    all 19 tests of Geppetto's `integration/` suite under `--geppetto-backend=carlo`),
+    and regression-checked on API 36 hardware (`SM-A166M`) with `smoke_serve.py`.
+- Serve `hierarchy.dump` over the control channel of `carlo serve` (refs #5).
+  **Host-tested only: `hierarchy.dump` over serve was not executed on any
+  device.** On success the answer is a hierarchy frame (kind 2) carrying the raw
+  UTF-8 XML of `docs/hierarchy.md` with the request ID echoed, never Base64 and
+  never logged; on failure a control error with a stable code (`unavailable`,
+  `conflict`, `windows_unavailable`, `inconsistent_snapshot`, `truncated`,
+  `unsupported_node`, `timeout`, `internal`). The command left the reserved
+  list; `display.info` and `stats` still answer `unavailable`.
+  - Gated by the exact hierarchy profile (`samsung_a16x_api36`); elsewhere,
+    the host and the API 34 reference included, it answers `unavailable`
+    without loading a library or making a Binder call.
+  - The automation session is registered lazily by the first dump (flags 1)
+    and reused by later dumps of the same serve session; it is unregistered in
+    the session teardown on every exit path. A revoked connection (API 36 `init`
+    with a null connection now drops it from the callback slot and marks the
+    slot revoked) or a `DEAD_OBJECT` Binder status closes the stale session and
+    re-opens it at most once per dump. Dumps use serve's own stop flag; the
+    one-shot commands keep their signal handlers. **The persistent path is
+    host-tested only (unit tests of the slot, the stale classification and the
+    control loop with a fake source); it was not built or run on a device.**
+    Snapshot ids and the generation continue across one serve session.
+  - `tools/smoke_serve.py --allow-hierarchy` takes two consecutive dumps in one
+    serve session (count and byte sizes only) and checks `accessibility_enabled`
+    after the agent has exited.
+  - `binder_hierarchy` is now computed from that same gate: `true` only on the
+    pinned API 36 build, `false` on the host and the API 34 reference.
+  - `ControlClient.hierarchy_dump()` in `tools/carlo_protocol.py` returns the
+    XML bytes or raises `ProtocolError` with the agent's code.
 - Add a complete accessibility hierarchy snapshot on a second pinned profile
   (#36, #37, #38, #39, #40, #41, #42, #43; refs #5). **Host-tested only: nothing
   in this entry was executed on a device.** `hierarchy-probe` reports counters,

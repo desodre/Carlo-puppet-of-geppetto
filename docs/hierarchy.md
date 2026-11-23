@@ -26,11 +26,12 @@ and shell UID 2000. Nothing is inferred from `SDK_INT`.
 
 | Profile | Build | Hierarchy |
 |---|---|---|
-| `reference_api34` | `google/sdk_gphone64_x86_64/emu64xa:14/UE1A.230829.050/12077443:userdebug/dev-keys`, API 34, x86_64 | `unsupported_profile`: its window-enumeration contract is not pinned |
+| `reference_api34` | `google/sdk_gphone64_x86_64/emu64xa:14/UE1A.230829.050/12077443:userdebug/dev-keys`, API 34, x86_64 | yes (14-field window, 45-bit API 34 node) |
 | `samsung_a16x_api36` | `samsung/a16xub/a16x:16/BP4A.251205.006/A166MUBSADZJA:user/release-keys`, API 36, aarch64 | yes |
 
 Any other device gets `unsupported_profile` and no Binder call. The pinned
 transactions and layouts are in
+[compat/api34-accessibility.json](compat/api34-accessibility.json) and
 [compat/samsung-a16x-api36-accessibility.json](compat/samsung-a16x-api36-accessibility.json).
 
 ## Acquisition
@@ -116,9 +117,9 @@ Empty results are not errors: zero windows gives `windows="0"`, and a window
 whose root is null is counted in `empty-windows` (probe: `empty_windows`, per
 display too) and emits no element.
 
-A node whose text is a spanned `CharSequence` with spans, or that carries a
-touch delegate, extra rendering info or leash Binders, cannot be decoded (those
-layouts are not pinned). Such a node is never emitted partially and never
+A node whose text carries an unpinned `TextUtils` span (`EasyEditSpan`/22, API 36 30+, or >3-deep `AccessibilityReplacementSpan`), or that carries
+extra rendering info or leash Binders, cannot be decoded (those layouts are not
+pinned). Pinned `TextUtils` spans (`1..=29` except `22`, including `SuggestionSpan` and `TtsSpan` API 34/36 differences) and touch delegates (bit 40 on API 34, bit 42 on API 36) are validated with bounded counts and never emitted. Such a node is never emitted partially and never
 dropped silently: the walk continues to count the failures and the snapshot
 fails with `unsupported_node`. When an answer fails to decode, the node is
 requested again alone so the failure is attributed to the right node.
@@ -172,8 +173,10 @@ id. Children are in the order the parent lists them.
 | 17 | `bounds` | `[left,top][right,bottom]`, bounds in screen, as the app reported them |
 
 Window root nodes carry four more, after `bounds`: `window-id`, `display-id`,
-`window-type` (the numeric `AccessibilityWindowInfo.TYPE_*` value, 1..7) and
-`window-layer`.
+`window-type` (the numeric `AccessibilityWindowInfo.TYPE_*` value: -1 for an
+unmapped WindowManager type, or 1..7) and `window-layer`. The -1 comes from the
+default branch of `AccessibilityWindowManager.updateWindowsLocked` in the device's
+`services.jar`, which keeps the raw WindowManager type only in Samsung's `mRawType`.
 
 Structural nodes without text are kept. Unlike `uiautomator dump`, nodes that
 are not visible to the user are **not** filtered out.

@@ -17,6 +17,7 @@
 //! and no second client exist here.
 
 mod control;
+mod hierarchy;
 mod socket;
 mod video;
 
@@ -33,6 +34,7 @@ use crate::error::CarloError;
 use crate::protocol::{self, Kind, VERSION};
 use crate::video::stream::Mirror;
 use control::{Control, Next};
+use hierarchy::Device;
 use socket::{BoundedStream, ControlSocket, Ended, STOP, Signals};
 use video::{Timings, Video};
 
@@ -167,8 +169,9 @@ pub fn run(session_dir: &str, output: &mut impl Write) -> Result<(), CarloError>
     let own_uid = socket::effective_uid();
     socket::validate_directory(directory, own_uid)?;
     let diagnostics = Diagnostics::collect()?;
-    // The profile gate only; no library is opened and no Binder call is made.
+    // The profile gates only; no library is opened and no Binder call is made.
     let source = Arc::new(Mirror::detect(&diagnostics)?);
+    let hierarchy = Box::new(Device::detect(&diagnostics)?);
     // Installed before anything is created, so a signal always reaches cleanup.
     let _signals = Signals::install()?;
     let listener = ControlSocket::bind(directory)?;
@@ -195,7 +198,12 @@ pub fn run(session_dir: &str, output: &mut impl Write) -> Result<(), CarloError>
         return Err(Error::PeerRejected { uid: peer.uid }.into());
     }
     let mut stream = BoundedStream::new(stream, &STOP).map_err(Error::Transport)?;
-    let mut control = Control::new(session, &diagnostics, Video::new(source, Timings::DEFAULT));
+    let mut control = Control::new(
+        session,
+        &diagnostics,
+        Video::new(source, Timings::DEFAULT),
+        hierarchy,
+    );
     let ended = converse(
         &mut stream,
         &mut control,
@@ -253,7 +261,8 @@ fn converse(
             Ok(Some(frame)) => {
                 let reply = control.handle(&frame);
                 drop(frame);
-                send(stream, reply.request_id, &reply.payload)?;
+                send(stream, reply.kind, reply.request_id, &reply.payload)?;
+                drop(reply.payload);
                 if let Some(listener) = listener.take_if(|_| control.initialized()) {
                     control.listen(listener);
                 }
@@ -266,7 +275,12 @@ fn converse(
             Err(protocol::Error::Io(source)) => return Err(ended(stream, source)),
             Err(error) => {
                 let delivered = match error.rejection() {
-                    Some(rejection) => send(stream, rejection.request_id, &rejection.payload),
+                    Some(rejection) => send(
+                        stream,
+                        Kind::Control,
+                        rejection.request_id,
+                        &rejection.payload,
+                    ),
                     None => Ok(()),
                 };
                 if !error.recoverable() {
@@ -279,10 +293,16 @@ fn converse(
     }
 }
 
-/// Write one control frame within [`WRITE_DEADLINE`].
-fn send(stream: &mut BoundedStream<'_>, request_id: u32, payload: &[u8]) -> Result<(), Error> {
+/// Write one response frame of `kind` (control, or a hierarchy document) within
+/// [`WRITE_DEADLINE`].
+fn send(
+    stream: &mut BoundedStream<'_>,
+    kind: Kind,
+    request_id: u32,
+    payload: &[u8],
+) -> Result<(), Error> {
     stream.set_deadline(Instant::now() + WRITE_DEADLINE);
-    protocol::write_frame(stream, Kind::Control, request_id, payload).map_err(|error| {
+    protocol::write_frame(stream, kind, request_id, payload).map_err(|error| {
         match (stream.ended(), error) {
             (Some(Ended::Interrupted), _) => Error::Interrupted,
             (Some(Ended::Deadline), _) => Error::WriteTimeout,
@@ -299,6 +319,9 @@ mod tests {
 
     use super::*;
 
+    use super::hierarchy::fake::Fake;
+    use crate::accessibility::Error as SnapshotError;
+
     const SESSION: &str = "0123456789abcdef0123456789abcdef";
 
     fn session(
@@ -307,12 +330,29 @@ mod tests {
         idle: Duration,
         client: impl FnOnce(UnixStream) + Send + 'static,
     ) -> Result<(), Error> {
+        with_source(stop, handshake, idle, Fake::default(), client)
+    }
+
+    /// The production loop and teardown order of [`run`] around `source`.
+    fn with_source(
+        stop: &AtomicBool,
+        handshake: Duration,
+        idle: Duration,
+        source: Fake,
+        client: impl FnOnce(UnixStream) + Send + 'static,
+    ) -> Result<(), Error> {
         let (server, peer) = UnixStream::pair().unwrap();
         let client = std::thread::spawn(move || client(peer));
         let diagnostics = Diagnostics::from_environment("linux", "x86_64", None, None, None, None);
-        let mut control = Control::new(SESSION.into(), &diagnostics, Video::unattached());
+        let mut control = Control::new(
+            SESSION.into(),
+            &diagnostics,
+            Video::unattached(),
+            Box::new(source),
+        );
         let mut stream = BoundedStream::new(server, stop).unwrap();
         let result = converse(&mut stream, &mut control, handshake, idle, None);
+        control.teardown();
         drop(stream);
         client.join().unwrap();
         result
@@ -328,6 +368,63 @@ mod tests {
     fn hello(stream: &mut UnixStream) {
         let body = format!(r#"{{"command":"hello","protocol":1,"session":"{SESSION}"}}"#);
         assert_eq!(request(stream, 1, &body)["ok"], true);
+    }
+
+    #[test]
+    fn hierarchy_dump_travels_as_a_hierarchy_frame_and_teardown_runs_on_every_exit() {
+        let xml = b"<?xml version='1.0' encoding='UTF-8'?><hierarchy rotation=\"0\"/>";
+        // Shutdown: one document, one stable error, then a clean exit.
+        let mut source = Fake::default();
+        source.results.push_back(Ok(xml.to_vec()));
+        source.results.push_back(Err(SnapshotError::Conflict));
+        let (dumps, teardowns) = (source.dumps.clone(), source.teardowns.clone());
+        let stop = AtomicBool::new(false);
+        let long = Duration::from_secs(5);
+        let result = with_source(&stop, long, long, source, move |mut stream| {
+            hello(&mut stream);
+            let dump = br#"{"command":"hierarchy.dump"}"#;
+            protocol::write_frame(&mut stream, Kind::Control, 0xABCD_0001, dump).unwrap();
+            let frame = protocol::read_frame(&mut stream).unwrap().unwrap();
+            assert_eq!(
+                (frame.kind, frame.request_id),
+                (Kind::Hierarchy, 0xABCD_0001)
+            );
+            assert_eq!(frame.payload, xml);
+            protocol::write_frame(&mut stream, Kind::Control, 7, dump).unwrap();
+            let frame = protocol::read_frame(&mut stream).unwrap().unwrap();
+            assert_eq!((frame.kind, frame.request_id), (Kind::Control, 7));
+            let body: serde_json::Value = serde_json::from_slice(&frame.payload).unwrap();
+            assert_eq!(
+                body,
+                serde_json::json!({"ok": false, "error": {"code": "conflict"}})
+            );
+            let body = request(&mut stream, 8, r#"{"command":"shutdown"}"#);
+            assert_eq!(body["ok"], true);
+        });
+        assert!(result.is_ok());
+        assert_eq!((dumps.get(), teardowns.get()), (2, 1));
+
+        // Abnormal ends: the client vanishes mid-session or a signal arrives.
+        let source = Fake::default();
+        let teardowns = source.teardowns.clone();
+        let result = with_source(&stop, long, long, source, move |mut stream| {
+            hello(&mut stream);
+            stream.write_all(b"CRLO\x01").unwrap();
+        });
+        assert!(matches!(
+            result,
+            Err(Error::Transport(_) | Error::Framing(_))
+        ));
+        assert_eq!(teardowns.get(), 1);
+        let stopped = AtomicBool::new(true);
+        let source = Fake::default();
+        let teardowns = source.teardowns.clone();
+        let result = with_source(&stopped, long, long, source, |mut peer| {
+            let mut sink = Vec::new();
+            let _ = peer.read_to_end(&mut sink);
+        });
+        assert!(matches!(result, Err(Error::Interrupted)));
+        assert_eq!(teardowns.get(), 1);
     }
 
     #[test]

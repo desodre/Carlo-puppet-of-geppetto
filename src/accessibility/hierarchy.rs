@@ -18,6 +18,7 @@ use crate::{diagnostics::Diagnostics, error::CarloError};
 use serde::Serialize;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
+    sync::atomic::AtomicBool,
     time::{Duration, Instant},
 };
 
@@ -49,6 +50,8 @@ pub(super) trait Transport {
     fn now(&mut self) -> Instant;
     /// Wait without holding any lock; may return early when cancelled.
     fn pause(&mut self, duration: Duration);
+    /// Window-list parcel layout for this session's profile.
+    fn window_layout(&self) -> window::Layout;
     /// `getWindows` reply after its exception header.
     fn windows(&mut self) -> Result<Vec<u8>, Error>;
     /// An empty list is the app's "no such node".
@@ -233,10 +236,11 @@ impl Walk<'_> {
         (stats.windows, stats.empty_windows, stats.nodes) = (0, 0, 0);
         (stats.max_depth, stats.duplicates, stats.foreign_nodes) = (0, 0, 0);
         let settle = self.transport.now() + WINDOWS_SETTLE;
+        let layout = self.transport.window_layout();
         let mut displays = loop {
             let reply = self.transport.windows()?;
             self.check_deadline()?;
-            let displays = window::decode(&reply)?.ok_or(Error::WindowsUnavailable)?;
+            let displays = window::decode_for(layout, &reply)?.ok_or(Error::WindowsUnavailable)?;
             let now = self.transport.now();
             if displays.iter().any(|display| !display.windows.is_empty()) || now >= settle {
                 break displays;
@@ -815,6 +819,222 @@ fn run(_: contract::Profile) -> Run {
     unreachable!("profile requires Android")
 }
 
+/// The hierarchy's exact gate: a pinned profile that carries the window-list
+/// contract. Pure comparisons; nothing is loaded and no Binder call is made.
+fn gated(
+    shell_api: Option<u32>,
+    effective_uid: Option<u32>,
+    architecture: &str,
+    fingerprint: Option<&str>,
+) -> Option<contract::Profile> {
+    contract::Profile::select(shell_api, effective_uid, architecture, fingerprint)
+        .filter(|profile| profile.hierarchy())
+}
+
+/// Whether this process is on the pinned hierarchy profile (`binder_hierarchy`).
+/// False on the host and on the API 34 reference.
+pub(crate) fn pinned(environment: &Diagnostics, fingerprint: Option<&str>) -> bool {
+    gated(
+        environment.shell_api(),
+        environment.effective_uid(),
+        std::env::consts::ARCH,
+        fingerprint,
+    )
+    .is_some()
+}
+
+/// Snapshots for a long-lived caller (`carlo serve`): the gate is decided once
+/// and the snapshot id and generation continue across snapshots. The automation
+/// session is registered lazily by the first snapshot and reused by later ones;
+/// [`teardown`](Self::teardown) (or dropping this value) unregisters it, so
+/// nothing outlives this value.
+pub(crate) struct Snapshots {
+    profile: contract::Profile,
+    sequence: Sequence,
+    /// `None` until the first snapshot and after teardown.
+    #[cfg(target_os = "android")]
+    session: Option<super::native::hierarchy::PersistentSession>,
+}
+
+impl Snapshots {
+    /// `None` off the pinned hierarchy profile; then nothing was opened.
+    pub(crate) fn detect(environment: &Diagnostics, fingerprint: Option<&str>) -> Option<Self> {
+        gated(
+            environment.shell_api(),
+            environment.effective_uid(),
+            std::env::consts::ARCH,
+            fingerprint,
+        )
+        .map(Self::new)
+    }
+
+    fn new(profile: contract::Profile) -> Self {
+        Self {
+            profile,
+            sequence: Sequence::new(Instant::now()),
+            #[cfg(target_os = "android")]
+            session: None,
+        }
+    }
+
+    /// One complete document or a typed failure with no document. `stop` is
+    /// the owner's cancellation flag; no signal handler is installed.
+    #[cfg(target_os = "android")]
+    pub(crate) fn take(&mut self, stop: &AtomicBool) -> Result<Vec<u8>, Error> {
+        let profile = self.profile;
+        self.session
+            .get_or_insert_with(|| super::native::hierarchy::PersistentSession::new(profile))
+            .take(stop, &mut self.sequence)
+    }
+
+    /// Off Android no profile passes the gate; nothing is ever registered.
+    #[cfg(not(target_os = "android"))]
+    pub(crate) fn take(&mut self, _stop: &AtomicBool) -> Result<Vec<u8>, Error> {
+        Err(Error::UnsupportedProfile)
+    }
+
+    /// Unregister the session, if one is registered, and release the exclusive
+    /// guard. Idempotent; a later [`take`](Self::take) registers again.
+    #[cfg(target_os = "android")]
+    pub(crate) fn teardown(&mut self) -> Result<(), Error> {
+        self.session
+            .take()
+            .map_or(Ok(()), |mut session| session.close())
+    }
+
+    #[cfg(not(target_os = "android"))]
+    pub(crate) fn teardown(&mut self) -> Result<(), Error> {
+        Ok(())
+    }
+}
+
+/// A failure that means the registered session itself is gone, so a
+/// long-lived owner re-opens it once: the Binder peer died (`DEAD_OBJECT`) or
+/// the system revoked the connection while a request was being made.
+pub(super) fn stale(error: &Error) -> bool {
+    /// `android::DEAD_OBJECT` (`-EPIPE`), as returned by `AIBinder_transact`.
+    const DEAD_OBJECT: i32 = -32;
+    matches!(
+        error,
+        Error::Binder {
+            status: DEAD_OBJECT,
+            ..
+        } | Error::Runtime("connection_revoked")
+    )
+}
+
+#[cfg(test)]
+mod serve_gate {
+    use super::*;
+
+    const SAMSUNG: Option<&str> = Some(contract::SAMSUNG_A16X_FINGERPRINT);
+
+    #[test]
+    fn both_pinned_profiles_pass_the_hierarchy_gate() {
+        assert_eq!(
+            gated(Some(34), Some(2000), "x86_64", Some(contract::FINGERPRINT)),
+            Some(contract::Profile::ReferenceApi34)
+        );
+        assert_eq!(
+            gated(Some(36), Some(2000), "aarch64", SAMSUNG),
+            Some(contract::Profile::SamsungA16xApi36)
+        );
+        for (api, uid, arch, fingerprint) in [
+            (Some(34), Some(0), "x86_64", Some(contract::FINGERPRINT)),
+            (Some(34), Some(2000), "aarch64", Some(contract::FINGERPRINT)),
+            (Some(36), Some(0), "aarch64", SAMSUNG),
+            (Some(36), Some(2000), "x86_64", SAMSUNG),
+            (Some(35), Some(2000), "aarch64", SAMSUNG),
+            (Some(36), Some(2000), "aarch64", None),
+            (None, None, "x86_64", None),
+        ] {
+            assert_eq!(gated(api, uid, arch, fingerprint), None);
+        }
+        let host = Diagnostics::from_environment("linux", "x86_64", None, None, Some(1000), None);
+        assert!(!pinned(&host, SAMSUNG));
+        assert!(Snapshots::detect(&host, SAMSUNG).is_none());
+        assert!(!pinned(&host, Some(contract::FINGERPRINT)));
+        assert!(Snapshots::detect(&host, Some(contract::FINGERPRINT)).is_none());
+        let reference = Diagnostics::from_environment(
+            "android",
+            "x86_64",
+            Some(34),
+            Some("x86_64".into()),
+            Some(2000),
+            None,
+        );
+        assert_eq!(
+            pinned(&reference, Some(contract::FINGERPRINT)),
+            std::env::consts::ARCH == "x86_64"
+        );
+        assert_eq!(
+            Snapshots::detect(&reference, Some(contract::FINGERPRINT)).is_some(),
+            std::env::consts::ARCH == "x86_64"
+        );
+        assert!(!pinned(&reference, SAMSUNG));
+    }
+
+    #[test]
+    fn only_a_dead_peer_or_a_revoked_connection_makes_the_session_stale() {
+        for error in [
+            Error::Binder {
+                operation: "find_node",
+                status: -32,
+            },
+            Error::Binder {
+                operation: "get_windows",
+                status: -32,
+            },
+            Error::Runtime("connection_revoked"),
+        ] {
+            assert!(stale(&error), "{error:?}");
+        }
+        // Everything else keeps the registration: snapshot-level failures are
+        // retried by the walk itself, and a cancelled or timed-out request
+        // leaves a live session.
+        for error in [
+            Error::Binder {
+                operation: "find_node",
+                status: -1,
+            },
+            Error::RemoteException {
+                operation: "get_windows",
+                code: -32,
+            },
+            Error::Runtime("connection_not_initialized"),
+            Error::Cancelled,
+            Error::Conflict,
+            Error::QueryTimeout,
+            Error::WindowGone,
+            Error::WindowsUnavailable,
+            Error::Truncated { limit: "nodes" },
+            Error::InconsistentSnapshot {
+                reason: "window_changed",
+                attempts: 3,
+            },
+        ] {
+            assert!(!stale(&error), "{error:?}");
+        }
+    }
+
+    /// Off Android the persistent path never registers: every take is a typed
+    /// refusal, teardown is idempotent and a take after teardown still refuses.
+    #[cfg(not(target_os = "android"))]
+    #[test]
+    fn host_snapshots_refuse_and_teardown_is_idempotent() {
+        let stop = AtomicBool::new(false);
+        let mut snapshots = Snapshots::new(contract::Profile::SamsungA16xApi36);
+        for _ in 0..2 {
+            assert_eq!(snapshots.take(&stop), Err(Error::UnsupportedProfile));
+        }
+        assert_eq!(snapshots.teardown(), Ok(()));
+        assert_eq!(snapshots.teardown(), Ok(()));
+        assert_eq!(snapshots.take(&stop), Err(Error::UnsupportedProfile));
+        // No snapshot was attempted, so the numbering did not advance.
+        assert_eq!(snapshots.sequence.last_id, 0);
+    }
+}
+
 /// Runs on the device through the same gate as the commands. On the pinned
 /// hierarchy build it registers and reads the screen; everywhere else it proves
 /// the refusal. Prints counters only.
@@ -858,12 +1078,19 @@ mod android_snapshot {
         println!("CARLO_HIERARCHY_SNAPSHOT {text}");
         // The second snapshot settles lazily created Binder state; the floor is
         // taken after it and must hold across further cycles.
+        // Let AccessibilityManagerService finish async window-tracking teardown from `report`,
+        // matching the settle window `resources()` provides before every subsequent cycle.
+        let _ = resources();
         let second = collect().unwrap();
         let floor = resources();
         let mut cycles = Vec::new();
         for _ in 0..CYCLES {
             let outcome = collect().unwrap();
-            assert_eq!(outcome.passed(), second.passed(), "{outcome:?}");
+            assert_eq!(
+                outcome.passed(),
+                second.passed(),
+                "second={second:?} outcome={outcome:?}"
+            );
             cycles.push(resources());
         }
         let after = *cycles.last().unwrap();
@@ -877,13 +1104,22 @@ mod android_snapshot {
             }
             // A session that initialized must have been unregistered.
             assert!(!outcome.session.initialized || outcome.session.unregistered);
-            if outcome.profile != Some("samsung_a16x_api36") {
+            if !matches!(
+                outcome.profile,
+                Some("reference_api34" | "samsung_a16x_api36")
+            ) {
                 assert_eq!(outcome.error, Some(Error::UnsupportedProfile));
                 assert!(!outcome.executed && outcome.snapshot.is_none());
             }
         }
         assert_eq!(report.take_document().is_some(), report.passed());
-        assert_eq!(after.0, floor.0, "{floor:?} {after:?}");
+        // At most one lazy FD per Binder pool thread may open after `floor`, and
+        // the count must stay strictly flat across the remaining cycles (zero leak).
+        assert_eq!(after.0, cycles[0].0, "{floor:?} {cycles:?}");
+        assert!(
+            after.0 <= floor.0 + crate::binder::pool::THREADS as usize,
+            "{floor:?} {cycles:?}"
+        );
         assert!(
             after.1 <= floor.1 + crate::binder::pool::THREADS as usize,
             "{floor:?} {after:?}"

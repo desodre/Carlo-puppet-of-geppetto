@@ -342,6 +342,14 @@ impl<'a> Reader<'a> {
 const MAX_STRING_UNITS_36: usize = 100_000;
 /// A node cannot list more children than a snapshot may hold nodes.
 const MAX_CHILDREN_36: usize = 10_000;
+/// Touch delegate targets per node, and rectangles per delegate region.
+const MAX_TOUCH_DELEGATES_36: usize = 256;
+const MAX_REGION_RECTS_36: usize = 256;
+/// Bounds on `TextUtils` span lists per hierarchy `CharSequence`.
+const MAX_SPANS: usize = 1024;
+const MAX_SPAN_DEPTH: usize = 4;
+const MAX_SPAN_ARRAY: usize = 128;
+const MAX_COLOR_STATES: usize = 64;
 /// `AccessibilityNodeInfo` non-default field bits of the pinned API 36 build, in
 /// write order. Names appear in typed errors; they never carry UI contents.
 const FIELDS_36: [&str; 50] = [
@@ -397,7 +405,56 @@ const FIELDS_36: [&str; 50] = [
     "expanded_state",
 ];
 
-/// Attach the API 36 field name to a primitive failure.
+/// Names of the 45 API 34 `AccessibilityNodeInfo` non-default bits, in write order.
+const FIELDS_34: [&str; 45] = [
+    "sealed",
+    "source_node_id",
+    "window_id",
+    "parent_node_id",
+    "label_for_id",
+    "labeled_by_id",
+    "traversal_before",
+    "traversal_after",
+    "min_duration_between_content_changes",
+    "connection_id",
+    "child_node_ids",
+    "bounds_in_parent",
+    "bounds_in_screen",
+    "bounds_in_window",
+    "actions",
+    "max_text_length",
+    "movement_granularities",
+    "boolean_properties",
+    "package_name",
+    "class_name",
+    "text",
+    "hint_text",
+    "error",
+    "state_description",
+    "content_description",
+    "pane_title",
+    "tooltip_text",
+    "container_title",
+    "view_id_resource_name",
+    "unique_id",
+    "text_selection_start",
+    "text_selection_end",
+    "input_type",
+    "live_region",
+    "drawing_order",
+    "extra_data_keys",
+    "extras",
+    "range_info",
+    "collection_info",
+    "collection_item_info",
+    "touch_delegate_info",
+    "extra_rendering_info",
+    "leashed_child",
+    "leashed_parent",
+    "leashed_parent_node_id",
+];
+
+/// Attach the profile field name to a primitive failure.
 fn at(field: &'static str, error: Error) -> Error {
     match error {
         Error::InvalidNode(reason) => Error::InvalidNodeField { field, reason },
@@ -449,6 +506,316 @@ impl Reader<'_> {
         }
         Ok(values)
     }
+    fn actions(&mut self, api36: bool) -> Result<(), Error> {
+        self.long()?; // standard action bitmap
+        let count = self.count(MAX_COLLECTION, false)?.expect("non-null count");
+        for _ in 0..count {
+            self.int()?;
+            self.text_hierarchy(api36)?;
+        }
+        Ok(())
+    }
+    fn extra_data_keys(&mut self) -> Result<(), Error> {
+        for _ in 0..self.count(MAX_COLLECTION, true)?.unwrap_or(0) {
+            self.string(true)?;
+        }
+        Ok(())
+    }
+    fn skip_bundle(&mut self, limit: usize, trailing_has_intent: bool) -> Result<(), Error> {
+        let len = self.count(limit, true)?.unwrap_or(0);
+        if len > 0 {
+            if !len.is_multiple_of(4) {
+                return Err(Error::InvalidNode("bundle_alignment"));
+            }
+            let magic = self.int()?;
+            if magic != 0x4c444e42 && magic != 0x4c444e44 {
+                return Err(Error::InvalidNode("bundle_magic"));
+            }
+            self.take(len)?; // opaque; Parcelables are never instantiated
+            if trailing_has_intent {
+                // Android 16 `BaseBundle.writeToParcelInner` appends
+                // `writeBoolean(mHasIntent)` after a non-empty payload.
+                self.boolean()?;
+            }
+        }
+        Ok(())
+    }
+    fn extras_payload(
+        &mut self,
+        node: &mut Node,
+        limit: usize,
+        trailing_has_intent: bool,
+    ) -> Result<(), Error> {
+        self.skip_bundle(limit, trailing_has_intent)?;
+        node.extras_omitted = true;
+        Ok(())
+    }
+    fn skip_int_array(&mut self, limit: usize) -> Result<(), Error> {
+        if let Some(len) = self.count(limit, true)? {
+            self.take(len * 4)?;
+        }
+        Ok(())
+    }
+    fn skip_color_state_list(&mut self) -> Result<(), Error> {
+        let count = self
+            .count(MAX_COLOR_STATES, false)?
+            .expect("non-null count");
+        for _ in 0..count {
+            self.skip_int_array(MAX_COLOR_STATES)?;
+        }
+        self.skip_int_array(MAX_COLOR_STATES)
+    }
+    fn text_hierarchy(&mut self, api36: bool) -> Result<Option<String>, Error> {
+        self.text_hierarchy_depth(api36, 0)
+    }
+    fn text_hierarchy_depth(&mut self, api36: bool, depth: usize) -> Result<Option<String>, Error> {
+        let kind = self.int()?;
+        if kind != 0 && kind != 1 {
+            return Err(Error::InvalidNode("char_sequence_kind"));
+        }
+        let text = self.string(false)?;
+        if kind == 0 && text.is_some() {
+            let mut spans = 0usize;
+            loop {
+                let span_kind = self.int()?;
+                if span_kind == 0 {
+                    break;
+                }
+                spans += 1;
+                if spans > MAX_SPANS {
+                    return Err(Error::InvalidNode("length_limit"));
+                }
+                self.skip_span(span_kind, api36, depth)?;
+            }
+        }
+        Ok(text)
+    }
+    fn skip_span(&mut self, kind: i32, api36: bool, depth: usize) -> Result<(), Error> {
+        // `TextUtils.CHAR_SEQUENCE_CREATOR` / `TextUtils.readSpan` wire payloads
+        // verified in both API 34 and API 36 `framework.jar`.
+        match kind {
+            // AlignmentSpan$Standard: alignment name
+            1 => {
+                self.string(true)?;
+            }
+            // ForegroundColorSpan(2), RelativeSizeSpan(3), ScaleXSpan(4),
+            // BackgroundColorSpan(12), SpellCheckSpan(20), SuggestionRangeSpan(21),
+            // AccessibilityClickableSpan(25), LineBackgroundSpan$Standard(27),
+            // LineHeightSpan$Standard(28)
+            2 | 3 | 4 | 12 | 20 | 21 | 25 | 27 | 28 => {
+                self.take(4)?;
+            }
+            // StrikethroughSpan(5), UnderlineSpan(6), SuperscriptSpan(14), SubscriptSpan(15)
+            5 | 6 | 14 | 15 => {}
+            // StyleSpan(7), LeadingMarginSpan$Standard(10), AbsoluteSizeSpan(16)
+            7 | 10 | 16 => {
+                self.take(8)?;
+            }
+            // BulletSpan(8)
+            8 => {
+                self.take(16)?;
+            }
+            // QuoteSpan(9)
+            9 => {
+                self.take(12)?;
+            }
+            // URLSpan(11)
+            11 => {
+                self.string(true)?;
+            }
+            // TypefaceSpan(13): family (String16) + LeakyTypefaceStorage (2*i32)
+            13 => {
+                self.string(true)?;
+                self.take(8)?;
+            }
+            // TextAppearanceSpan(17)
+            17 => {
+                self.string(true)?; // family
+                self.take(8)?; // style, textSize
+                if self.boolean()? {
+                    self.skip_color_state_list()?;
+                }
+                if self.boolean()? {
+                    self.skip_color_state_list()?;
+                }
+                self.take(12)?; // LeakyTypefaceStorage (2*i32) + textFontWeight
+                if let Some(class) = self.string(true)? {
+                    if class != "android.os.LocaleList" {
+                        return Err(Error::InvalidNode("unexpected_class"));
+                    }
+                    if self.string(false)?.is_none() {
+                        return Err(Error::InvalidNode("missing_tags"));
+                    }
+                }
+                self.take(32)?; // shadowRadius/Dx/Dy, shadowColor, 3 bools, letterSpacing
+                self.string(true)?; // fontFeatureSettings
+                self.string(true)?; // fontVariationSettings
+            }
+            // Annotation(18): key, value
+            18 => {
+                self.string(true)?;
+                self.string(true)?;
+            }
+            // SuggestionSpan(19)
+            19 => {
+                if let Some(len) = self.count(MAX_SPAN_ARRAY, true)? {
+                    for _ in 0..len {
+                        self.string(true)?;
+                    }
+                }
+                self.take(4)?; // flags
+                self.string(true)?; // localeString
+                self.string(true)?; // languageTag
+                self.take(if api36 { 52 } else { 36 })?;
+            }
+            // LocaleSpan(23): LocaleList.writeToParcel writes String8 directly
+            23 => {
+                self.string(false)?;
+            }
+            // TtsSpan(24): type + PersistableBundle (`mHasIntent` on API 36)
+            24 => {
+                self.string(true)?;
+                self.skip_bundle(contract::MAX_BATCH_BYTES as usize, api36)?;
+            }
+            // AccessibilityURLSpan(26): url + id
+            26 => {
+                self.string(true)?;
+                self.take(4)?;
+            }
+            // AccessibilityReplacementSpan(29): nested CharSequence
+            29 => {
+                if depth + 1 >= MAX_SPAN_DEPTH {
+                    return Err(Error::UnsupportedNodeLayout("char_sequence_span"));
+                }
+                self.text_hierarchy_depth(api36, depth + 1)?;
+            }
+            // EasyEditSpan(22, PendingIntent Binder) and unpinned spans (e.g. API 36 30/31)
+            _ => return Err(Error::UnsupportedNodeLayout("char_sequence_span")),
+        }
+        // `TextUtils.readSpan`: start, end, flags.
+        self.take(12)?;
+        Ok(())
+    }
+    fn range_info(&mut self) -> Result<(), Error> {
+        // Type 3 is RANGE_TYPE_INDETERMINATE. The three floats are app data
+        // that a dump does not use: consumed without interpretation.
+        if !(0..=3).contains(&self.int()?) {
+            return Err(Error::InvalidNode("range_type"));
+        }
+        self.take(12)?;
+        Ok(())
+    }
+    fn touch_delegate_info(&mut self) -> Result<(), Error> {
+        // `TouchDelegateInfo.writeToParcel`, called directly (no presence int,
+        // no class name): i32 size, then per target a `Region` (i32 int count,
+        // multiple of four, then that many rect ints) and an i64 node id.
+        let size = self
+            .count(MAX_TOUCH_DELEGATES_36, false)?
+            .expect("non-null count");
+        for _ in 0..size {
+            let ints = self
+                .count(MAX_REGION_RECTS_36 * 4, false)?
+                .expect("non-null count");
+            if !ints.is_multiple_of(4) {
+                return Err(Error::InvalidNode("count_not_multiple_of_four"));
+            }
+            // Rect coordinates are app data: empty or inverted is accepted.
+            self.take(ints * 4)?;
+            self.long()?;
+        }
+        Ok(())
+    }
+    fn node34(&mut self) -> Result<Node, Error> {
+        let mask = self.long().map_err(|error| at("field_mask", error))? as u64;
+        if mask >> FIELDS_34.len() != 0 {
+            return Err(Error::UnsupportedNodeField {
+                field: "field_mask",
+                reason: "unknown_bit",
+            });
+        }
+        // Rendering info and leash Binders have no pinned layout.
+        for (offset, name) in FIELDS_34[41..=43].iter().enumerate() {
+            if mask & (1 << (41 + offset)) != 0 {
+                return Err(Error::UnsupportedNodeField {
+                    field: name,
+                    reason: "layout_not_pinned",
+                });
+            }
+        }
+        let mut node = Node::default();
+        for (bit, name) in FIELDS_34.iter().enumerate() {
+            if mask & (1 << bit) != 0 {
+                self.field34(bit, &mut node)
+                    .map_err(|error| at(name, error))?;
+            }
+        }
+        Ok(node)
+    }
+    fn field34(&mut self, bit: usize, node: &mut Node) -> Result<(), Error> {
+        match bit {
+            0 => {
+                self.boolean()?;
+            }
+            1 => node.source_id = self.long()?,
+            2 => {
+                node.window_id = self.int()?;
+                if node.window_id < -1 {
+                    return Err(Error::InvalidNode("range"));
+                }
+            }
+            3 => node.parent_id = self.long()?,
+            4..=8 | 44 => {
+                self.long()?;
+            }
+            9 => {
+                node.connection_id = self.int()?;
+                if node.connection_id < -1 {
+                    return Err(Error::InvalidNode("range"));
+                }
+            }
+            10 => node.children = self.longs36(MAX_CHILDREN_36)?,
+            11 => node.bounds_in_parent = self.bounds36()?,
+            12 => node.bounds_in_screen = self.bounds36()?,
+            13 => node.bounds_in_window = self.bounds36()?,
+            14 => self.actions(false)?,
+            15 | 16 | 30..=34 => {
+                self.int()?;
+            }
+            17 => node.properties = Properties::from_bits(self.int()?),
+            18 => node.package = self.text_hierarchy(false)?,
+            19 => node.class = self.text_hierarchy(false)?,
+            20 => node.text = self.text_hierarchy(false)?,
+            21..=23 | 25..=27 => {
+                self.text_hierarchy(false)?;
+            }
+            24 => node.content_description = self.text_hierarchy(false)?,
+            28 => node.resource_id = self.string(true)?,
+            29 => node.unique_id = self.string(true)?,
+            35 => self.extra_data_keys()?,
+            36 => self.extras_payload(node, contract::MAX_BATCH_BYTES as usize, false)?,
+            37 => self.range_info()?,
+            38 => {
+                // rows, columns (-1 = unknown is legitimate), hierarchical, selectionMode.
+                self.int()?;
+                self.int()?;
+                self.boolean()?;
+                self.int()?;
+            }
+            39 => {
+                self.string(true)?; // rowTitle
+                self.int()?;
+                self.int()?;
+                self.string(true)?; // columnTitle
+                self.int()?;
+                self.int()?;
+                self.boolean()?; // heading
+                self.boolean()?; // selected
+            }
+            40 => self.touch_delegate_info()?,
+            _ => return Err(Error::UnsupportedNodeLayout("layout_not_pinned")),
+        }
+        Ok(())
+    }
     fn node36(&mut self) -> Result<Node, Error> {
         let mask = self.long().map_err(|error| at("field_mask", error))? as u64;
         if mask >> FIELDS_36.len() != 0 {
@@ -457,9 +824,9 @@ impl Reader<'_> {
                 reason: "unknown_bit",
             });
         }
-        // Region lists, rendering info and leash Binders have no pinned layout.
-        for (offset, name) in FIELDS_36[42..=45].iter().enumerate() {
-            if mask & (1 << (42 + offset)) != 0 {
+        // Rendering info and leash Binders have no pinned layout.
+        for (offset, name) in FIELDS_36[43..=45].iter().enumerate() {
+            if mask & (1 << (43 + offset)) != 0 {
                 return Err(Error::UnsupportedNodeField {
                     field: name,
                     reason: "layout_not_pinned",
@@ -507,60 +874,23 @@ impl Reader<'_> {
             12 => node.bounds_in_parent = self.bounds36()?,
             13 => node.bounds_in_screen = self.bounds36()?,
             14 => node.bounds_in_window = self.bounds36()?,
-            15 => {
-                self.long()?; // standard action bitmap
-                let count = self.count(MAX_COLLECTION, false)?.expect("non-null count");
-                for _ in 0..count {
-                    self.int()?;
-                    self.text()?;
-                }
-            }
+            15 => self.actions(true)?,
             16 | 17 | 32..=36 => {
                 self.int()?;
             }
             18 => node.properties = Properties::from_bits(self.int()?),
-            19 => node.package = self.text()?,
-            20 => node.class = self.text()?,
-            21 => node.text = self.text()?,
-            25 => node.content_description = self.text()?,
+            19 => node.package = self.text_hierarchy(true)?,
+            20 => node.class = self.text_hierarchy(true)?,
+            21 => node.text = self.text_hierarchy(true)?,
+            25 => node.content_description = self.text_hierarchy(true)?,
             22..=24 | 26..=29 => {
-                self.text()?;
+                self.text_hierarchy(true)?;
             }
             30 => node.resource_id = self.string(true)?,
             31 => node.unique_id = self.string(true)?,
-            37 => {
-                for _ in 0..self.count(MAX_COLLECTION, true)?.unwrap_or(0) {
-                    self.string(true)?;
-                }
-            }
-            38 => {
-                let len = self
-                    .count(contract::MAX_BATCH_BYTES as usize, true)?
-                    .unwrap_or(0);
-                if len > 0 {
-                    if !len.is_multiple_of(4) {
-                        return Err(Error::InvalidNode("bundle_alignment"));
-                    }
-                    let magic = self.int()?;
-                    if magic != 0x4c444e42 && magic != 0x4c444e44 {
-                        return Err(Error::InvalidNode("bundle_magic"));
-                    }
-                    self.take(len)?; // opaque; Parcelables are never instantiated
-                    // Android 16 `BaseBundle.writeToParcelInner` appends
-                    // `writeBoolean(mHasIntent)` after a non-empty payload (read from
-                    // the pinned framework.jar; an empty Bundle is the single 0).
-                    self.boolean()?;
-                }
-                node.extras_omitted = true;
-            }
-            39 => {
-                // Type 3 is RANGE_TYPE_INDETERMINATE. The three floats are app
-                // data that a dump does not use: consumed without interpretation.
-                if !(0..=3).contains(&self.int()?) {
-                    return Err(Error::InvalidNode("range_type"));
-                }
-                self.take(12)?;
-            }
+            37 => self.extra_data_keys()?,
+            38 => self.extras_payload(node, contract::MAX_BATCH_BYTES as usize, true)?,
+            39 => self.range_info()?,
             40 => {
                 // rows, columns (-1 = unknown is legitimate), hierarchical,
                 // selectionMode, itemCount, importantForAccessibilityItemCount.
@@ -582,6 +912,7 @@ impl Reader<'_> {
                 self.boolean()?; // selected
                 self.int()?; // sortDirection, always written
             }
+            42 => self.touch_delegate_info()?,
             47 => {
                 // Two selection ends: i32 offset + i64 node id each.
                 self.take(24)?;
@@ -603,11 +934,62 @@ impl Reader<'_> {
     }
 }
 
-/// Decode the arguments of one API 36 result callback (`code` 1 or 2), excluding
-/// the interface token. A null node answered with the sentinel interaction id is
-/// [`Error::WindowGone`]. Null list items are skipped. Nothing is resynchronised:
-/// the first field that does not match fails the whole callback, by name.
+/// Decode the arguments of one hierarchy result callback (`code` 1 or 2),
+/// excluding the interface token. A null node answered with the sentinel
+/// interaction id is [`Error::WindowGone`]. Null list items are skipped.
+pub(super) fn decode_batch(
+    profile: contract::Profile,
+    code: u32,
+    data: &[u8],
+) -> Result<Batch, Error> {
+    match profile {
+        contract::Profile::ReferenceApi34 => decode34(code, data),
+        contract::Profile::SamsungA16xApi36 => decode36(code, data),
+    }
+}
+
+/// Validate and consume one `AccessibilityWindowInfo` title (`TextUtils`
+/// `CharSequence`), mapping node codec errors to [`Error::InvalidWindowList`].
+pub(super) fn skip_window_title(
+    data: &[u8],
+    position: &mut usize,
+    limit: usize,
+    api36: bool,
+) -> Result<(), Error> {
+    let mut reader = Reader {
+        data,
+        position: *position,
+        string_units: limit,
+    };
+    reader.text_hierarchy(api36).map_err(|error| {
+        let reason = match error {
+            Error::InvalidNode(reason) | Error::UnsupportedNodeLayout(reason) => reason,
+            _ => "invalid_title",
+        };
+        Error::InvalidWindowList {
+            field: "title",
+            reason,
+        }
+    })?;
+    *position = reader.position;
+    Ok(())
+}
+
+/// Decode one API 34 hierarchy result callback (`code` 1 or 2).
+pub(super) fn decode34(code: u32, data: &[u8]) -> Result<Batch, Error> {
+    decode_batch_with(code, data, |reader| reader.node34())
+}
+
+/// Decode one API 36 hierarchy result callback (`code` 1 or 2).
 pub(super) fn decode36(code: u32, data: &[u8]) -> Result<Batch, Error> {
+    decode_batch_with(code, data, |reader| reader.node36())
+}
+
+fn decode_batch_with<'a>(
+    code: u32,
+    data: &'a [u8],
+    read_node: impl Fn(&mut Reader<'a>) -> Result<Node, Error>,
+) -> Result<Batch, Error> {
     let envelope = |reason| Error::InvalidNodeField {
         field: "callback",
         reason,
@@ -624,7 +1006,7 @@ pub(super) fn decode36(code: u32, data: &[u8]) -> Result<Batch, Error> {
     match code {
         contract::NODE_RESULT => {
             if reader.boolean().map_err(|error| at("presence", error))? {
-                nodes.push(reader.node36()?);
+                nodes.push(read_node(&mut reader)?);
             }
         }
         contract::NODE_RESULTS => {
@@ -637,7 +1019,7 @@ pub(super) fn decode36(code: u32, data: &[u8]) -> Result<Batch, Error> {
                     .boolean()
                     .map_err(|error| at("item_presence", error))?
                 {
-                    nodes.push(reader.node36()?);
+                    nodes.push(read_node(&mut reader)?);
                 }
             }
         }
@@ -1209,7 +1591,6 @@ mod tests36 {
             );
         }
         for (bit, name) in [
-            (42, "touch_delegate_info"),
             (43, "extra_rendering_info"),
             (44, "leashed_child"),
             (45, "leashed_parent"),
@@ -1222,7 +1603,7 @@ mod tests36 {
                 }
             );
         }
-        let spanned = [int(0), string(Some("styled"), false), int(7)].concat();
+        let unpinned_span = [int(0), string(Some("styled"), false), int(22)].concat();
         for (bit, name) in [
             (21, "text"),
             (25, "content_description"),
@@ -1230,7 +1611,7 @@ mod tests36 {
             (29, "container_title"),
         ] {
             assert_eq!(
-                decode36(1, &single(vec![(bit, spanned.clone())])).unwrap_err(),
+                decode36(1, &single(vec![(bit, unpinned_span.clone())])).unwrap_err(),
                 Error::UnsupportedNodeField {
                     field: name,
                     reason: "char_sequence_span"
@@ -1300,6 +1681,79 @@ mod tests36 {
     }
 
     #[test]
+    fn touch_delegate_info_is_consumed_and_bounded() {
+        let rect = |l: i32, t: i32, r: i32, b: i32| [int(l), int(t), int(r), int(b)].concat();
+        let region = |rects: &[Vec<u8>]| [int(4 * rects.len() as i32), rects.concat()].concat();
+        // Empty map, then a later field to prove alignment.
+        let empty = single(vec![(42, int(0)), (46, long(7))]);
+        assert!(decode36(1, &empty).is_ok());
+        // Several targets: empty region, inverted rect, two rects.
+        let delegates = [
+            int(3),
+            region(&[]),
+            long(11),
+            region(&[rect(30, 40, 10, 20)]),
+            long(12),
+            region(&[rect(0, 0, 5, 5), rect(5, 5, 9, 9)]),
+            long(-1),
+        ]
+        .concat();
+        let batch = decode36(
+            1,
+            &single(vec![
+                (21, text(Some("t"))),
+                (42, delegates.clone()),
+                (46, long(7)),
+            ]),
+        )
+        .unwrap();
+        assert_eq!(batch.nodes[0].text.as_deref(), Some("t"));
+        // The largest bounded map and the largest bounded region are accepted.
+        let max_map = [
+            int(MAX_TOUCH_DELEGATES_36 as i32),
+            [region(&[]), long(1)]
+                .concat()
+                .repeat(MAX_TOUCH_DELEGATES_36),
+        ]
+        .concat();
+        assert!(decode36(1, &single(vec![(42, max_map)])).is_ok());
+        let max_region = [
+            int(1),
+            int(4 * MAX_REGION_RECTS_36 as i32),
+            rect(0, 0, 1, 1).repeat(MAX_REGION_RECTS_36),
+            long(1),
+        ]
+        .concat();
+        assert!(decode36(1, &single(vec![(42, max_region)])).is_ok());
+        // Truncated bodies run into the trailing interaction id (71), then end.
+        for (bytes, reason) in [
+            (int(-1), "negative_length"),
+            (int(MAX_TOUCH_DELEGATES_36 as i32 + 1), "length_limit"),
+            ([int(1), int(-4)].concat(), "negative_length"),
+            (
+                [int(1), int(4 * MAX_REGION_RECTS_36 as i32 + 4)].concat(),
+                "length_limit",
+            ),
+            (
+                [int(1), int(3), int(0), int(0), int(0), long(1)].concat(),
+                "count_not_multiple_of_four",
+            ),
+            ([int(1), int(4), int(0), int(0)].concat(), "truncated"),
+            ([int(1), region(&[])].concat(), "truncated"),
+        ] {
+            assert_eq!(
+                field(decode36(1, &single(vec![(42, bytes)]))),
+                ("touch_delegate_info", reason)
+            );
+        }
+        // Every aligned prefix of a valid map fails; none is accepted partially.
+        for len in 0..delegates.len() / 4 {
+            let cut = delegates[..len * 4].to_vec();
+            assert!(decode36(1, &single(vec![(42, cut)])).is_err(), "cut {len}");
+        }
+    }
+
+    #[test]
     fn typed_lists_decode_counts_null_lists_and_null_items() {
         let a = node(vec![(1, long(1)), (2, int(8))]);
         let b = node(vec![(1, long(2)), (2, int(8)), (21, text(Some("b")))]);
@@ -1335,7 +1789,7 @@ mod tests36 {
         // A failing node fails the whole callback: nothing after it is trusted.
         let spanned = node(vec![(
             21,
-            [int(0), string(Some("s"), false), int(3)].concat(),
+            [int(0), string(Some("s"), false), int(22)].concat(),
         )]);
         assert_eq!(
             field(decode36(
@@ -1413,5 +1867,455 @@ mod tests36 {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests34 {
+    use super::*;
+    fn int(v: i32) -> Vec<u8> {
+        v.to_le_bytes().to_vec()
+    }
+    fn long(v: i64) -> Vec<u8> {
+        v.to_le_bytes().to_vec()
+    }
+    fn float(v: f32) -> Vec<u8> {
+        int(v.to_bits() as i32)
+    }
+    fn string(s: Option<&str>, utf16: bool) -> Vec<u8> {
+        let Some(s) = s else {
+            return int(-1);
+        };
+        let mut data = if utf16 {
+            let units: Vec<u16> = s.encode_utf16().collect();
+            let mut data = int(units.len() as i32);
+            for unit in units {
+                data.extend(unit.to_le_bytes());
+            }
+            data.extend([0, 0]);
+            data
+        } else {
+            let mut data = int(s.len() as i32);
+            data.extend(s.as_bytes());
+            data.push(0);
+            data
+        };
+        while !data.len().is_multiple_of(4) {
+            data.push(0);
+        }
+        data
+    }
+    fn text(s: Option<&str>) -> Vec<u8> {
+        [int(1), string(s, false)].concat()
+    }
+    fn node(mut fields: Vec<(u32, Vec<u8>)>) -> Vec<u8> {
+        fields.sort_by_key(|(bit, _)| *bit);
+        let mask = fields
+            .iter()
+            .fold(0_u64, |mask, (bit, _)| mask | (1_u64 << bit));
+        let mut data = long(mask as i64);
+        for (_, bytes) in fields {
+            data.extend(bytes);
+        }
+        data
+    }
+    fn single(fields: Vec<(u32, Vec<u8>)>) -> Vec<u8> {
+        [int(1), node(fields), int(71)].concat()
+    }
+    fn list(items: Vec<Option<Vec<u8>>>, id: i32) -> Vec<u8> {
+        let mut data = int(items.len() as i32);
+        for item in items {
+            match item {
+                Some(body) => {
+                    data.extend(int(1));
+                    data.extend(body);
+                }
+                None => data.extend(int(0)),
+            }
+        }
+        data.extend(int(id));
+        data
+    }
+    fn full() -> Vec<(u32, Vec<u8>)> {
+        let delegate = [int(1), int(4), int(0), int(0), int(10), int(10), long(99)].concat();
+        vec![
+            (0, int(1)),
+            (1, long(0x1234)),
+            (2, int(8)),
+            (3, long(0x5678)),
+            (4, long(41)),
+            (5, long(42)),
+            (6, long(45)),
+            (7, long(46)),
+            (8, long(47)),
+            (9, int(4)),
+            (10, [int(3), long(90), long(91), long(92)].concat()),
+            (11, [int(1), int(2), int(3), int(4)].concat()),
+            (12, [int(-5), int(250), int(-10), int(400)].concat()),
+            (13, [int(5), int(6), int(7), int(8)].concat()),
+            (
+                14,
+                [long(3), int(1), int(0x7f00001), text(Some("ação"))].concat(),
+            ),
+            (15, int(-1)),
+            (16, int(31)),
+            (
+                17,
+                int(1 | 2 | 4 | 8 | 16 | 32 | 64 | 128 | 256 | 512 | 2048 | 4096),
+            ),
+            (18, text(Some("org.geppetto.carlo.fixture"))),
+            (19, text(Some("android.widget.CheckBox"))),
+            (20, text(Some("ação 🪵 <&>\0終"))),
+            (21, text(Some("hint"))),
+            (22, text(None)),
+            (23, text(Some("state"))),
+            (24, text(Some("descrição"))),
+            (25, text(Some("pane"))),
+            (26, text(Some("tooltip"))),
+            (27, text(Some("container"))),
+            (28, string(Some("fixture:id/raiz_木"), true)),
+            (29, string(Some("único🪵"), true)),
+            (30, int(1)),
+            (31, int(2)),
+            (32, int(3)),
+            (33, int(1)),
+            (34, int(9)),
+            (
+                35,
+                [int(2), string(None, true), string(Some("key"), true)].concat(),
+            ),
+            // API 34 BaseBundle: length + magic + payload bytes (NO trailing mHasIntent).
+            (36, [int(4), int(0x4c444e42), int(0)].concat()),
+            (37, [int(2), float(0.0), float(10.0), float(5.0)].concat()),
+            // 4-field CollectionInfo: rows, cols (-1 accepted), hierarchical, selectionMode.
+            (38, [int(-1), int(2), int(0), int(1)].concat()),
+            // 8-field CollectionItemInfo (no sortDirection).
+            (
+                39,
+                [
+                    string(None, true),
+                    int(0),
+                    int(1),
+                    string(Some("col"), true),
+                    int(1),
+                    int(1),
+                    int(0),
+                    int(1),
+                ]
+                .concat(),
+            ),
+            (40, delegate),
+            (44, long(77)),
+        ]
+    }
+    fn field(result: Result<Batch, Error>) -> (&'static str, &'static str) {
+        match result {
+            Err(Error::InvalidNodeField { field, reason })
+            | Err(Error::UnsupportedNodeField { field, reason }) => (field, reason),
+            other => panic!("expected a field error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn decodes_every_pinned_field_of_the_api34_hierarchy_layout() {
+        let data = single(full());
+        let batch = decode_batch(contract::Profile::ReferenceApi34, 1, &data).unwrap();
+        assert_eq!(batch.interaction_id, 71);
+        let node = &batch.nodes[0];
+        assert_eq!(node.source_id, 0x1234);
+        assert_eq!(node.window_id, 8);
+        assert_eq!(node.parent_id, 0x5678);
+        assert_eq!(node.connection_id, 4);
+        assert_eq!(node.children, [90, 91, 92]);
+        assert_eq!(
+            node.bounds_in_screen,
+            Bounds {
+                left: -10,
+                top: -5,
+                right: 400,
+                bottom: 250
+            }
+        );
+        assert_eq!(node.package.as_deref(), Some("org.geppetto.carlo.fixture"));
+        assert_eq!(node.class.as_deref(), Some("android.widget.CheckBox"));
+        assert_eq!(node.text.as_deref(), Some("ação 🪵 <&>\0終"));
+        assert_eq!(node.content_description.as_deref(), Some("descrição"));
+        assert_eq!(node.resource_id.as_deref(), Some("fixture:id/raiz_木"));
+        assert_eq!(node.unique_id.as_deref(), Some("único🪵"));
+        assert!(node.extras_omitted);
+        assert!(node.properties.checked && node.properties.editable);
+
+        // Inverted bounds pass through for hierarchy dumps.
+        let inverted = [int(20), int(10), int(9), int(5)].concat();
+        let batch = decode34(1, &single(vec![(12, inverted)])).unwrap();
+        assert_eq!(batch.nodes[0].bounds_in_screen.top, 20);
+    }
+
+    #[test]
+    fn api34_rejects_unpinned_bits_and_mismatched_api36_trailing_fields() {
+        for bit in 45..64 {
+            assert_eq!(
+                field(decode34(1, &single(vec![(bit, vec![])]))),
+                ("field_mask", "unknown_bit")
+            );
+        }
+        for (bit, name) in [
+            (41, "extra_rendering_info"),
+            (42, "leashed_child"),
+            (43, "leashed_parent"),
+        ] {
+            assert_eq!(
+                decode34(1, &single(vec![(bit, vec![])])).unwrap_err(),
+                Error::UnsupportedNodeField {
+                    field: name,
+                    reason: "layout_not_pinned"
+                }
+            );
+        }
+        // Extras with API 36 trailing mHasIntent has 4 trailing bytes on API 34.
+        let extras36 = single(vec![(
+            36,
+            [int(4), int(0x4c444e42), int(0), int(0)].concat(),
+        )]);
+        assert!(decode34(1, &extras36).is_err());
+        // API 34 list + sentinel + truncation + mutation fuzzing.
+        let a = node(vec![(1, long(1)), (2, int(8))]);
+        let b = node(vec![(1, long(2)), (2, int(8)), (20, text(Some("b")))]);
+        let listed = decode34(2, &list(vec![Some(a), None, Some(b)], 12)).unwrap();
+        assert_eq!(listed.nodes.len(), 2);
+        assert_eq!(listed.nodes[1].text.as_deref(), Some("b"));
+        assert_eq!(
+            decode34(1, &[int(0), int(i32::MAX)].concat()).unwrap_err(),
+            Error::WindowGone
+        );
+        let single_node = single(full());
+        for len in 0..single_node.len() {
+            assert!(decode34(1, &single_node[..len]).is_err(), "len {len}");
+        }
+        let batch = list(vec![Some(node(full())), None, Some(node(full()))], 9);
+        for len in 0..batch.len() {
+            assert!(decode34(2, &batch[..len]).is_err(), "list len {len}");
+        }
+        for data in [single_node, batch] {
+            for offset in 0..data.len() {
+                for value in [0, 0x7f, 0xff] {
+                    let mut mutated = data.clone();
+                    mutated[offset] = value;
+                    let _ = decode34(1, &mutated);
+                    let _ = decode34(2, &mutated);
+                }
+            }
+        }
+    }
+
+    fn span_entry(kind: i32, payload: Vec<u8>) -> Vec<u8> {
+        [int(kind), payload, int(0), int(3), int(33)].concat()
+    }
+
+    fn spanned_text(value: &str, spans: Vec<Vec<u8>>) -> Vec<u8> {
+        let mut out = [int(0), string(Some(value), false)].concat();
+        for span in spans {
+            out.extend(span);
+        }
+        out.extend(int(0));
+        out
+    }
+
+    #[test]
+    fn hierarchy_decoders_consume_all_pinned_text_utils_spans() {
+        let color_state_list = [
+            int(1), // N states
+            int(1),
+            int(0x0101_009e), // state_enabled
+            int(1),
+            int(0x1122_3344),
+        ]
+        .concat();
+        let text_appearance = [
+            string(Some("sans-serif"), true),
+            int(1),  // style
+            int(16), // textSize
+            int(1),  // has textColor
+            color_state_list.clone(),
+            int(1), // has linkColor
+            color_state_list,
+            int(-1), // typeface pid
+            int(-1), // typeface index
+            int(400),
+            string(Some("android.os.LocaleList"), true),
+            string(Some("en-US,pt-BR"), false),
+            vec![0_u8; 32], // shadow + flags + letterSpacing
+            string(Some("smcp"), true),
+            string(None, true),
+        ]
+        .concat();
+        let replacement_inner = spanned_text("inner", vec![span_entry(5, vec![])]);
+
+        let common_spans = vec![
+            span_entry(1, string(Some("ALIGN_CENTER"), true)),
+            span_entry(2, int(0x1122_3344)),
+            span_entry(3, int(1.5_f32.to_bits() as i32)),
+            span_entry(4, int(1.25_f32.to_bits() as i32)),
+            span_entry(5, vec![]),
+            span_entry(6, vec![]),
+            span_entry(7, [int(1), int(0)].concat()),
+            span_entry(8, [int(4), int(0), int(0), int(2)].concat()),
+            span_entry(9, [int(0), int(2), int(2)].concat()),
+            span_entry(10, [int(8), int(4)].concat()),
+            span_entry(11, string(Some("https://example.invalid"), true)),
+            span_entry(12, int(0x5566_7788)),
+            span_entry(13, [string(Some("serif"), true), int(-1), int(-1)].concat()),
+            span_entry(14, vec![]),
+            span_entry(15, vec![]),
+            span_entry(16, [int(14), int(1)].concat()),
+            span_entry(17, text_appearance),
+            span_entry(
+                18,
+                [string(Some("k"), true), string(Some("v"), true)].concat(),
+            ),
+            span_entry(20, int(0)),
+            span_entry(21, int(0)),
+            span_entry(23, string(Some("pt-BR"), false)),
+            span_entry(25, int(1)),
+            span_entry(
+                26,
+                [string(Some("https://a11y.invalid"), true), int(9)].concat(),
+            ),
+            span_entry(27, int(0x1234)),
+            span_entry(28, int(24)),
+            span_entry(29, replacement_inner),
+        ];
+
+        // API 34: SuggestionSpan has 36 trailing bytes; TtsSpan PersistableBundle omits mHasIntent.
+        let mut spans34 = common_spans.clone();
+        spans34.push(span_entry(
+            19,
+            [
+                int(1),
+                string(Some("sugg"), true),
+                int(0),
+                string(Some("en_US"), true),
+                string(Some("en-US"), true),
+                vec![0_u8; 36],
+            ]
+            .concat(),
+        ));
+        spans34.push(span_entry(
+            24,
+            [string(Some("tts.text"), true), int(-1)].concat(),
+        ));
+        spans34.push(span_entry(
+            24,
+            [
+                string(Some("tts.date"), true),
+                int(4),
+                int(0x4c444e42),
+                int(0),
+            ]
+            .concat(),
+        ));
+        let action34 = [
+            long(1),
+            int(1),
+            int(0x0102_0001),
+            spanned_text("action", vec![span_entry(7, [int(1), int(0)].concat())]),
+        ]
+        .concat();
+        let node34 = decode34(
+            1,
+            &single(vec![
+                (14, action34),
+                (20, spanned_text("api34", spans34)),
+                (24, spanned_text("desc34", vec![span_entry(6, vec![])])),
+            ]),
+        )
+        .unwrap();
+        assert_eq!(node34.nodes[0].text.as_deref(), Some("api34"));
+        assert_eq!(
+            node34.nodes[0].content_description.as_deref(),
+            Some("desc34")
+        );
+
+        // API 36: SuggestionSpan has 52 trailing bytes; TtsSpan PersistableBundle has trailing mHasIntent.
+        let mut spans36 = common_spans;
+        spans36.push(span_entry(
+            19,
+            [
+                int(-1),
+                int(0),
+                string(None, true),
+                string(None, true),
+                vec![0_u8; 52],
+            ]
+            .concat(),
+        ));
+        spans36.push(span_entry(
+            24,
+            [
+                string(Some("tts.cardinal"), true),
+                int(4),
+                int(0x4c444e42),
+                int(0),
+                int(0), // mHasIntent false
+            ]
+            .concat(),
+        ));
+        let action36 = [
+            long(1),
+            int(1),
+            int(0x0102_0001),
+            spanned_text("act36", vec![span_entry(2, int(0x0102_0304))]),
+        ]
+        .concat();
+        let fields36 = [
+            (15, action36),
+            (21, spanned_text("api36", spans36)),
+            (25, spanned_text("desc36", vec![span_entry(5, vec![])])),
+        ];
+        let mut mask36 = 0_u64;
+        for (bit, _) in &fields36 {
+            mask36 |= 1_u64 << bit;
+        }
+        let mut raw36 = [int(1), long(mask36 as i64)].concat();
+        for (_, bytes) in fields36 {
+            raw36.extend(bytes);
+        }
+        raw36.extend(int(71));
+        let node36 = decode36(1, &raw36).unwrap();
+        assert_eq!(node36.nodes[0].text.as_deref(), Some("api36"));
+        assert_eq!(
+            node36.nodes[0].content_description.as_deref(),
+            Some("desc36")
+        );
+
+        // Unpinned span kinds (22 EasyEditSpan, 30+) and excessive replacement nesting fail closed.
+        for bad_kind in [22, 30, 31] {
+            let bad = spanned_text("x", vec![span_entry(bad_kind, vec![])]);
+            assert_eq!(
+                field(decode34(1, &single(vec![(20, bad)]))),
+                ("text", "char_sequence_span")
+            );
+        }
+        let mut deep = spanned_text("leaf", vec![span_entry(5, vec![])]);
+        for _ in 0..MAX_SPAN_DEPTH {
+            deep = spanned_text("wrap", vec![span_entry(29, deep)]);
+        }
+        assert_eq!(
+            field(decode34(1, &single(vec![(20, deep)]))),
+            ("text", "char_sequence_span")
+        );
+
+        // P1 decode() intentionally still rejects non-empty span lists.
+        let p1_spanned = [
+            int(1),
+            long(1 << 20),
+            spanned_text("p1", vec![span_entry(5, vec![])]),
+            int(1),
+        ]
+        .concat();
+        assert_eq!(
+            decode(&p1_spanned).unwrap_err(),
+            Error::UnsupportedNodeLayout("char_sequence_span")
+        );
     }
 }

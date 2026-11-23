@@ -334,19 +334,19 @@ impl OwnedParcel {
 struct Shared {
     slot: Mutex<Slot<Strong>>,
     changed: Condvar,
-    /// Selects the client callbacks this session tolerates; fixed at creation.
-    profile: Profile,
+    /// Selects hierarchy callbacks (revocation + `onSystemActionsChanged`) vs legacy P1 probes.
+    hierarchy: bool,
 }
 impl Shared {
     #[cfg(test)]
     fn new() -> Self {
-        Self::for_profile(Profile::ReferenceApi34)
+        Self::for_hierarchy(false)
     }
-    fn for_profile(profile: Profile) -> Self {
+    fn for_hierarchy(hierarchy: bool) -> Self {
         Self {
             slot: Mutex::new(Slot::default()),
             changed: Condvar::new(),
-            profile,
+            hierarchy,
         }
     }
     fn closing(&self) {
@@ -357,14 +357,20 @@ impl Shared {
             self.changed.notify_all();
         }
     }
+    /// One-shot commands: cancelled by the process signals of [`Signals`].
     fn wait_init(&self) -> Result<i32, Error> {
+        self.wait_init_with_stop(&STOP)
+    }
+    /// Bounded wait for `init`, cancelled by `stop` (the caller's own flag, so a
+    /// long-lived owner never has to install or replace [`Signals`]).
+    fn wait_init_with_stop(&self, stop: &AtomicBool) -> Result<i32, Error> {
         let deadline = Instant::now() + Duration::from_secs(5);
         let mut slot = self
             .slot
             .lock()
             .map_err(|_| Error::Runtime("callback_state_poisoned"))?;
         loop {
-            if STOP.load(Ordering::Relaxed) {
+            if stop.load(Ordering::Relaxed) {
                 return Err(Error::Cancelled);
             }
             if let Some(error) = &slot.error {
@@ -490,14 +496,17 @@ fn dispatch(binder: *mut Binder, code: u32, parcel: *const Parcel) -> i32 {
         }
     };
     let invalid_before = slot.counters.invalid;
+    // A revoked connection, released only after the slot is unlocked (as `closing`).
+    let mut revoked = None;
     let result = match code {
-        contract::INIT if shared.profile == Profile::SamsungA16xApi36 => {
-            // This build calls init again with a null connection while it resets
-            // the session; that is a revocation notice, not a malformed callback.
+        contract::INIT if shared.hierarchy => {
+            // Hierarchy sessions tolerate init again with a null connection
+            // while the system resets the session; counted as a revocation.
+            // The dead connection leaves the slot so no request reuses it.
             match decode_init_nullable(&mut reader) {
                 Ok(Some((id, connection))) => slot.accept(id, connection),
                 Ok(None) => {
-                    slot.revocations = slot.revocations.saturating_add(1);
+                    revoked = slot.revoke();
                     Ok(())
                 }
                 Err(error) => Err(error),
@@ -510,9 +519,7 @@ fn dispatch(binder: *mut Binder, code: u32, parcel: *const Parcel) -> i32 {
             slot.invalidations = slot.invalidations.saturating_add(1);
             reader.finish()
         }
-        contract::SYSTEM_ACTIONS_CHANGED if shared.profile == Profile::SamsungA16xApi36 => {
-            reader.finish()
-        }
+        contract::SYSTEM_ACTIONS_CHANGED if shared.hierarchy => reader.finish(),
         _ => {
             slot.counters.ignored = slot.counters.ignored.saturating_add(1);
             return -74;
@@ -526,6 +533,8 @@ fn dispatch(binder: *mut Binder, code: u32, parcel: *const Parcel) -> i32 {
         shared.changed.notify_all();
         return -22;
     }
+    drop(slot);
+    drop(revoked);
     shared.changed.notify_all();
     0
 }
@@ -608,12 +617,16 @@ struct Session {
     cleanup_due: bool,
     query_ids: super::query::Ids,
     profile: Profile,
+    hierarchy: bool,
 }
 impl Session {
     fn open() -> Result<Self, Error> {
-        Self::open_profile(Profile::ReferenceApi34)
+        Self::open_for(Profile::ReferenceApi34, false)
     }
     fn open_profile(profile: Profile) -> Result<Self, Error> {
+        Self::open_for(profile, true)
+    }
+    fn open_for(profile: Profile, hierarchy: bool) -> Result<Self, Error> {
         let api = Api::global()?;
         let classes = Classes::global(api)?;
         start_pool()?;
@@ -625,11 +638,12 @@ impl Session {
         if !unsafe { (api.associate)(manager.pointer.as_ptr(), classes.manager.as_ptr()) } {
             return Err(Error::Runtime("manager_descriptor_mismatch"));
         }
-        let shared = Arc::new(Shared::for_profile(profile));
+        let shared = Arc::new(Shared::for_hierarchy(hierarchy));
         let owner = local_binder(api, classes.owner, &shared)?;
         let client = local_binder(api, classes.client, &shared)?;
         Ok(Self {
             profile,
+            hierarchy,
             manager,
             _owner: owner,
             client,
@@ -642,7 +656,12 @@ impl Session {
         let mut request = OwnedParcel::new(&self.manager)?;
         request.binder(&self._owner)?;
         request.binder(&self.client)?;
-        request.info(self.profile.service_info())?;
+        let service_info = if self.hierarchy {
+            self.profile.hierarchy_service_info()
+        } else {
+            self.profile.service_info()
+        };
+        request.info(service_info)?;
         request.int(0)?; // user 0 only, on every pinned profile
         let flags = contract::registration_flags();
         if flags != 1 {
@@ -683,35 +702,45 @@ unsafe extern "C" fn signal_handler(_: i32) {
 unsafe extern "C" {
     fn signal(number: i32, handler: usize) -> usize;
 }
+/// SIGHUP, SIGINT, SIGTERM: the set serve handles, so killing the host `adb shell`
+/// (SIGHUP) cancels a running snapshot like an interrupt does.
+const SIGNALS: [(i32, &str); 3] = [
+    (1, "sighup_handler_install_failed"),
+    (2, "sigint_handler_install_failed"),
+    (15, "sigterm_handler_install_failed"),
+];
 struct Signals {
-    old_int: usize,
-    old_term: usize,
+    old: [usize; SIGNALS.len()],
+    /// Dispositions installed so far; only these are restored on drop.
+    installed: usize,
 }
 impl Signals {
     fn install() -> Result<Self, Error> {
         STOP.store(false, Ordering::Relaxed);
-        // SAFETY: signal handler only does a lock-free atomic store. The CLI has
-        // one active proof; handlers are restored after explicit unregister.
-        let old_int = unsafe { signal(2, signal_handler as *const () as usize) };
-        if old_int == usize::MAX {
-            return Err(Error::Runtime("sigint_handler_install_failed"));
+        let mut signals = Self {
+            old: [0; SIGNALS.len()],
+            installed: 0,
+        };
+        for (number, failure) in SIGNALS {
+            // SAFETY: signal handler only does a lock-free atomic store. The CLI has
+            // one active proof; every saved disposition is restored on drop, which
+            // also undoes a partial install when a later one fails.
+            let old = unsafe { signal(number, signal_handler as *const () as usize) };
+            if old == usize::MAX {
+                return Err(Error::Runtime(failure));
+            }
+            signals.old[signals.installed] = old;
+            signals.installed += 1;
         }
-        // SAFETY: same static handler; all dispositions are saved/restored.
-        let old_term = unsafe { signal(15, signal_handler as *const () as usize) };
-        if old_term == usize::MAX {
-            // SAFETY: restore exactly the prior disposition returned by signal.
-            unsafe { signal(2, old_int) };
-            return Err(Error::Runtime("sigterm_handler_install_failed"));
-        }
-        Ok(Self { old_int, old_term })
+        Ok(signals)
     }
 }
 impl Drop for Signals {
     fn drop(&mut self) {
-        // SAFETY: restore the original dispositions, no pointers to Rust stack data.
-        unsafe {
-            signal(2, self.old_int);
-            signal(15, self.old_term);
+        for index in (0..self.installed).rev() {
+            // SAFETY: restore exactly the prior disposition returned by signal;
+            // no pointers to Rust stack data.
+            unsafe { signal(SIGNALS[index].0, self.old[index]) };
         }
     }
 }

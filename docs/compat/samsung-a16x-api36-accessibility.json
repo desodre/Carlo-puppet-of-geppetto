@@ -268,7 +268,8 @@
       },
       {
         "name": "type",
-        "wire": "i32, 1..7"
+        "wire": "i32, -1 (unmapped WindowManager type) or 1..7",
+        "source": "services.jar AccessibilityWindowManager.updateWindowsLocked: the default branch for an unmapped WindowManager type calls setType(-1) and semSetRawType(<raw type>), observed for ty=2634 (Samsung Pay HintService) on Samsung Home"
       },
       {
         "name": "layer",
@@ -305,7 +306,7 @@
       {
         "name": "title",
         "wire": "CharSequence",
-        "handling": "validated and discarded; a non-empty span list is a typed error"
+        "handling": "validated and discarded; pinned TextUtils spans 1..=29 (except unpinned 22 EasyEditSpan) are consumed, unpinned spans fail typed"
       },
       {
         "name": "anchorId",
@@ -393,7 +394,7 @@
       "scrollable": 512,
       "visibleToUser": 2048
     },
-    "char_sequence": "i32 1 + String8 for plain text; i32 0 + String8 + span list for spanned text. A non-empty span list is rejected (span bodies are not pinned).",
+    "char_sequence": "i32 1 + String8 for plain text; i32 0 + String8 + span list for spanned text: pinned TextUtils span kinds 1..=29 (except unpinned 22 EasyEditSpan and API 36 spans 30+) are validated and skipped (36B trailing SuggestionSpan on API 34 vs 52B on API 36; mHasIntent on API 36 TtsSpan PersistableBundle).",
     "limits": {
       "string_units": 100000,
       "children": 10000,
@@ -698,9 +699,9 @@
       {
         "bit": 42,
         "name": "touchDelegateInfo",
-        "wire": "i32 n, n*(Region + i64)",
+        "wire": "TouchDelegateInfo.writeToParcel called directly (no presence int, no class name): i32 size, then size*(Region + i64 nodeId); Region.writeToParcel is i32 count (multiple of 4) then count i32 rect ints (read from the pinned framework.jar)",
         "api34_bit": 40,
-        "handling": "rejected: unsupported_node_field"
+        "handling": "consumed, never emitted: size 0..256, region count 0..1024 and a multiple of 4, rect coordinates not interpreted"
       },
       {
         "bit": 43,

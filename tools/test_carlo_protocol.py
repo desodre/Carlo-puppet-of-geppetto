@@ -7,7 +7,8 @@ import unittest
 from pathlib import Path
 
 from carlo_protocol import (
-    CONTROL, END, MEDIA, VIDEO, Frame, ProtocolError, VideoChannel, VideoPacket,
+    CONTROL, END, HIERARCHY, MEDIA, VIDEO, ControlClient, Frame, ProtocolError, VideoChannel,
+    VideoPacket,
     decode_video_packet, encode, encode_video_packet, read_frame,
 )
 
@@ -124,6 +125,48 @@ class ProtocolTests(unittest.TestCase):
             channel.attach("ab" * 16, request_id=1)
         channel.close()
         theirs.close()
+
+    def test_hierarchy_dump_returns_raw_xml_or_raises_the_stable_code(self):
+        ours, theirs = socket.socketpair()
+        client = ControlClient(ours, timeout=2)
+        reader = theirs.makefile("rb")
+        xml = '<?xml version="1.0"?><hierarchy><node text="café"/></hierarchy>'
+        theirs.sendall(encode(HIERARCHY, 1, xml.encode()))
+        self.assertEqual(client.hierarchy_dump(), xml.encode())
+        sent = read_frame(reader)
+        self.assertEqual((sent.kind, sent.request_id), (CONTROL, 1))
+        self.assertEqual(json.loads(sent.payload), {"command": "hierarchy.dump"})
+        # A control answer is the agent's typed failure; the connection stays usable.
+        for request_id, code in enumerate(("unavailable", "conflict", "timeout"), start=2):
+            body = {"ok": False, "error": {"code": code}}
+            theirs.sendall(encode(CONTROL, request_id, json.dumps(body).encode()))
+            with self.assertRaises(ProtocolError) as raised:
+                client.hierarchy_dump()
+            self.assertEqual(raised.exception.code, code)
+            self.assertTrue(raised.exception.recoverable)
+            self.assertEqual(raised.exception.request_id, request_id)
+            self.assertEqual(read_frame(reader).request_id, request_id)
+        # Anything else is a contract violation, never returned as a document.
+        for frame in (
+            encode(CONTROL, 5, b'{"ok":true}'),
+            encode(CONTROL, 6, b"[1]"),
+            encode(CONTROL, 7, b"not json"),
+            encode(HIERARCHY, 99, b"<hierarchy/>"),
+            encode(HIERARCHY, 9, b"<a>\xff</a>"),
+            encode(VIDEO, 10, b""),
+        ):
+            theirs.sendall(frame)
+            with self.assertRaises(ProtocolError) as raised:
+                client.hierarchy_dump()
+            self.assertIn(raised.exception.code, ("invalid_response", "unexpected_kind"))
+            self.assertNotIn("<", str(raised.exception))
+        theirs.shutdown(socket.SHUT_WR)
+        with self.assertRaises(ProtocolError) as raised:
+            client.hierarchy_dump()
+        self.assertEqual(raised.exception.code, "closed")
+        reader.close()
+        theirs.close()
+        client.close()
 
 
 if __name__ == "__main__":

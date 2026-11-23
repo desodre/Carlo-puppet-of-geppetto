@@ -2,7 +2,7 @@
 use super::*;
 use crate::accessibility::{
     node::Properties,
-    window::fixture::{Spec, reply},
+    window::fixture::{Spec, reply, reply_for},
 };
 use std::collections::VecDeque;
 
@@ -14,6 +14,8 @@ struct Fake {
     now: Instant,
     /// Clock advance per `find`.
     tick: Duration,
+    /// Window parcel layout decoded by [`Walk::attempt`].
+    window_layout: window::Layout,
     /// Queue of window replies; the last one repeats.
     windows: VecDeque<Result<Vec<u8>, Error>>,
     /// `(window, node id)` to node; the world the "apps" answer from.
@@ -38,6 +40,7 @@ impl Fake {
         Self {
             now: Instant::now(),
             tick: Duration::from_millis(1),
+            window_layout: window::Layout::SamsungApi36,
             windows: VecDeque::from([Ok(windows)]),
             nodes: HashMap::new(),
             roots: HashMap::new(),
@@ -99,6 +102,9 @@ impl Transport for Fake {
     fn pause(&mut self, duration: Duration) {
         self.pauses.push(duration);
         self.now += duration;
+    }
+    fn window_layout(&self) -> window::Layout {
+        self.window_layout
     }
     fn windows(&mut self) -> Result<Vec<u8>, Error> {
         self.window_calls += 1;
@@ -1031,6 +1037,20 @@ fn a_document_is_withheld_unless_the_whole_session_was_clean() {
     ] {
         assert_eq!(serde_json::to_string(&error).unwrap(), text);
     }
+}
+
+#[test]
+fn api34_window_layout_walks_without_raw_type() {
+    let mut fake = Fake::new(reply_for(
+        window::Layout::AospApi34,
+        &[(0, vec![Spec::new(0, 11, 5)])],
+    ));
+    fake.window_layout = window::Layout::AospApi34;
+    chain(&mut fake, 11, 3);
+    let (stats, result) = fake.run();
+    let document = result.unwrap();
+    assert_eq!(stats.nodes, 3);
+    assert_eq!(node_count(&document), 3);
 }
 
 #[test]
