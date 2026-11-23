@@ -699,9 +699,9 @@
       {
         "bit": 42,
         "name": "touchDelegateInfo",
-        "wire": "i32 n, n*(Region + i64)",
+        "wire": "TouchDelegateInfo.writeToParcel called directly (no presence int, no class name): i32 size, then size*(Region + i64 nodeId); Region.writeToParcel is i32 count (multiple of 4) then count i32 rect ints (read from the pinned framework.jar)",
         "api34_bit": 40,
-        "handling": "rejected: unsupported_node_field"
+        "handling": "consumed, never emitted: size 0..256, region count 0..1024 and a multiple of 4, rect coordinates not interpreted"
       },
       {
         "bit": 43,

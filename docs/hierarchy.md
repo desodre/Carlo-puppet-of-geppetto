@@ -116,9 +116,10 @@ Empty results are not errors: zero windows gives `windows="0"`, and a window
 whose root is null is counted in `empty-windows` (probe: `empty_windows`, per
 display too) and emits no element.
 
-A node whose text is a spanned `CharSequence` with spans, or that carries a
-touch delegate, extra rendering info or leash Binders, cannot be decoded (those
-layouts are not pinned). Such a node is never emitted partially and never
+A node whose text is a spanned `CharSequence` with spans, or that carries
+extra rendering info or leash Binders, cannot be decoded (those layouts are not
+pinned). A touch delegate (API 36 bit 42, pinned from the device's
+framework.jar) is consumed with bounded counts and never emitted. Such a node is never emitted partially and never
 dropped silently: the walk continues to count the failures and the snapshot
 fails with `unsupported_node`. When an answer fails to decode, the node is
 requested again alone so the failure is attributed to the right node.

@@ -342,6 +342,9 @@ impl<'a> Reader<'a> {
 const MAX_STRING_UNITS_36: usize = 100_000;
 /// A node cannot list more children than a snapshot may hold nodes.
 const MAX_CHILDREN_36: usize = 10_000;
+/// Touch delegate targets per node, and rectangles per delegate region.
+const MAX_TOUCH_DELEGATES_36: usize = 256;
+const MAX_REGION_RECTS_36: usize = 256;
 /// `AccessibilityNodeInfo` non-default field bits of the pinned API 36 build, in
 /// write order. Names appear in typed errors; they never carry UI contents.
 const FIELDS_36: [&str; 50] = [
@@ -457,9 +460,9 @@ impl Reader<'_> {
                 reason: "unknown_bit",
             });
         }
-        // Region lists, rendering info and leash Binders have no pinned layout.
-        for (offset, name) in FIELDS_36[42..=45].iter().enumerate() {
-            if mask & (1 << (42 + offset)) != 0 {
+        // Rendering info and leash Binders have no pinned layout.
+        for (offset, name) in FIELDS_36[43..=45].iter().enumerate() {
+            if mask & (1 << (43 + offset)) != 0 {
                 return Err(Error::UnsupportedNodeField {
                     field: name,
                     reason: "layout_not_pinned",
@@ -581,6 +584,26 @@ impl Reader<'_> {
                 self.boolean()?; // heading
                 self.boolean()?; // selected
                 self.int()?; // sortDirection, always written
+            }
+            42 => {
+                // `TouchDelegateInfo.writeToParcel`, called directly (no presence
+                // int, no class name): i32 size, then per target a `Region`
+                // (i32 int count, multiple of four, then that many rect ints)
+                // and an i64 node id. Consumed only; never emitted.
+                let size = self
+                    .count(MAX_TOUCH_DELEGATES_36, false)?
+                    .expect("non-null count");
+                for _ in 0..size {
+                    let ints = self
+                        .count(MAX_REGION_RECTS_36 * 4, false)?
+                        .expect("non-null count");
+                    if !ints.is_multiple_of(4) {
+                        return Err(Error::InvalidNode("count_not_multiple_of_four"));
+                    }
+                    // Rect coordinates are app data: empty or inverted is accepted.
+                    self.take(ints * 4)?;
+                    self.long()?;
+                }
             }
             47 => {
                 // Two selection ends: i32 offset + i64 node id each.
@@ -1209,7 +1232,6 @@ mod tests36 {
             );
         }
         for (bit, name) in [
-            (42, "touch_delegate_info"),
             (43, "extra_rendering_info"),
             (44, "leashed_child"),
             (45, "leashed_parent"),
@@ -1297,6 +1319,79 @@ mod tests36 {
             batch.nodes[0].text.as_ref().unwrap().len(),
             MAX_STRING_UNITS + 1
         );
+    }
+
+    #[test]
+    fn touch_delegate_info_is_consumed_and_bounded() {
+        let rect = |l: i32, t: i32, r: i32, b: i32| [int(l), int(t), int(r), int(b)].concat();
+        let region = |rects: &[Vec<u8>]| [int(4 * rects.len() as i32), rects.concat()].concat();
+        // Empty map, then a later field to prove alignment.
+        let empty = single(vec![(42, int(0)), (46, long(7))]);
+        assert!(decode36(1, &empty).is_ok());
+        // Several targets: empty region, inverted rect, two rects.
+        let delegates = [
+            int(3),
+            region(&[]),
+            long(11),
+            region(&[rect(30, 40, 10, 20)]),
+            long(12),
+            region(&[rect(0, 0, 5, 5), rect(5, 5, 9, 9)]),
+            long(-1),
+        ]
+        .concat();
+        let batch = decode36(
+            1,
+            &single(vec![
+                (21, text(Some("t"))),
+                (42, delegates.clone()),
+                (46, long(7)),
+            ]),
+        )
+        .unwrap();
+        assert_eq!(batch.nodes[0].text.as_deref(), Some("t"));
+        // The largest bounded map and the largest bounded region are accepted.
+        let max_map = [
+            int(MAX_TOUCH_DELEGATES_36 as i32),
+            [region(&[]), long(1)]
+                .concat()
+                .repeat(MAX_TOUCH_DELEGATES_36),
+        ]
+        .concat();
+        assert!(decode36(1, &single(vec![(42, max_map)])).is_ok());
+        let max_region = [
+            int(1),
+            int(4 * MAX_REGION_RECTS_36 as i32),
+            rect(0, 0, 1, 1).repeat(MAX_REGION_RECTS_36),
+            long(1),
+        ]
+        .concat();
+        assert!(decode36(1, &single(vec![(42, max_region)])).is_ok());
+        // Truncated bodies run into the trailing interaction id (71), then end.
+        for (bytes, reason) in [
+            (int(-1), "negative_length"),
+            (int(MAX_TOUCH_DELEGATES_36 as i32 + 1), "length_limit"),
+            ([int(1), int(-4)].concat(), "negative_length"),
+            (
+                [int(1), int(4 * MAX_REGION_RECTS_36 as i32 + 4)].concat(),
+                "length_limit",
+            ),
+            (
+                [int(1), int(3), int(0), int(0), int(0), long(1)].concat(),
+                "count_not_multiple_of_four",
+            ),
+            ([int(1), int(4), int(0), int(0)].concat(), "truncated"),
+            ([int(1), region(&[])].concat(), "truncated"),
+        ] {
+            assert_eq!(
+                field(decode36(1, &single(vec![(42, bytes)]))),
+                ("touch_delegate_info", reason)
+            );
+        }
+        // Every aligned prefix of a valid map fails; none is accepted partially.
+        for len in 0..delegates.len() / 4 {
+            let cut = delegates[..len * 4].to_vec();
+            assert!(decode36(1, &single(vec![(42, cut)])).is_err(), "cut {len}");
+        }
     }
 
     #[test]
