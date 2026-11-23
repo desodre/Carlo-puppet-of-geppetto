@@ -7,8 +7,6 @@
 //! [`crate::accessibility::hierarchy`]: off it nothing is loaded and no Binder
 //! call is made.
 
-use std::sync::atomic::Ordering;
-
 use super::socket::STOP;
 use crate::accessibility::{self, Error, hierarchy::Snapshots};
 use crate::diagnostics::Diagnostics;
@@ -27,10 +25,12 @@ pub(super) trait HierarchySource {
 
 /// This process's source. `None` off the pinned hierarchy profile.
 ///
-/// Each snapshot registers its own automation session and unregisters it
-/// before returning (on every exit path, by the session's own guard), so no
-/// registration is held between requests; snapshot ids and the generation
-/// continue across the whole serve session.
+/// The first `hierarchy.dump` registers one automation session (flags 1) and
+/// later dumps reuse it; a revoked or dead session is re-opened at most once per
+/// dump. Every wait is cancelled by the serve session's own [`STOP`], so no
+/// signal handler is replaced. `teardown`, which runs on every exit of the serve
+/// session, unregisters it (and so does dropping the source). Snapshot ids and
+/// the generation continue across the whole serve session.
 pub(super) struct Device {
     snapshots: Option<Snapshots>,
 }
@@ -55,17 +55,15 @@ impl HierarchySource for Device {
         let Some(snapshots) = self.snapshots.as_mut() else {
             return Err(Error::UnsupportedProfile);
         };
-        let (document, interrupted) = snapshots.take();
-        // While the session ran, SIGINT/SIGTERM went to its own handlers; hand
-        // the signal on so the serve session still ends as interrupted.
-        if interrupted {
-            STOP.store(true, Ordering::Relaxed);
-        }
-        document
+        snapshots.take(&STOP)
     }
 
     fn teardown(&mut self) {
-        self.snapshots = None;
+        if let Some(mut snapshots) = self.snapshots.take() {
+            // The session is ending: there is no client to report an unregister
+            // failure to, and it carries no UI contents to log.
+            let _ = snapshots.teardown();
+        }
     }
 }
 

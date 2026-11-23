@@ -540,6 +540,33 @@ mod tests {
     }
 
     #[test]
+    fn consecutive_dumps_reuse_one_source_until_teardown() {
+        // The persistent registration lives in the source: consecutive dumps
+        // (and a failed one between them) must not tear it down; only the end
+        // of the session does, after which a dump is unavailable.
+        let source = Fake {
+            results: [
+                Ok(b"<hierarchy/>".to_vec()),
+                Err(Error::QueryTimeout),
+                Ok(b"<hierarchy rotation=\"1\"/>".to_vec()),
+            ]
+            .into(),
+            ..Fake::default()
+        };
+        let (dumps, teardowns) = (source.dumps.clone(), source.teardowns.clone());
+        let mut control = initialized_with(source);
+        assert_eq!(dump(&mut control, 1).kind, Kind::Hierarchy);
+        assert_eq!(control_code(&dump(&mut control, 2)), "timeout");
+        let reply = dump(&mut control, 3);
+        assert_eq!(reply.kind, Kind::Hierarchy);
+        assert_eq!(reply.payload, b"<hierarchy rotation=\"1\"/>");
+        assert_eq!((dumps.get(), teardowns.get()), (3, 0));
+        control.teardown();
+        assert_eq!(teardowns.get(), 1);
+        assert_eq!(control_code(&dump(&mut control, 4)), "unavailable");
+    }
+
+    #[test]
     fn hierarchy_dump_failures_are_control_errors_with_stable_codes() {
         let cases = [
             (Error::UnsupportedProfile, "unavailable"),

@@ -263,19 +263,27 @@ class ParsingTests(unittest.TestCase):
 
     def test_summary_accepts_each_hierarchy_outcome_only_with_its_evidence(self):
         dumped = {"binder_hierarchy_available": True, "hierarchy": "dumped",
-                  "hierarchy_frame": "hierarchy", "hierarchy_bytes": 2048,
-                  "accessibility_enabled_restored": True}
+                  "hierarchy_frame": "hierarchy", "hierarchy_dumps": 2,
+                  "hierarchy_bytes": [2048, 2051], "accessibility_enabled_restored": True}
         for change in [{"binder_hierarchy_available": True, "hierarchy": "not_requested"},
                        dumped]:
             valid = summary()
             valid["cases"][0].update(change)
             self.assertIs(validate_summary(valid), valid)
         for change in [{"hierarchy": "unavailable"}, {"hierarchy_frame": "control"},
-                       {"hierarchy_bytes": 0}, {"hierarchy_bytes": True},
-                       {"hierarchy_bytes": None}, {"accessibility_enabled_restored": False}]:
+                       {"hierarchy_dumps": 1}, {"hierarchy_dumps": None},
+                       {"hierarchy_bytes": [2048]}, {"hierarchy_bytes": [2048, 0]},
+                       {"hierarchy_bytes": [True, 10]}, {"hierarchy_bytes": 2048},
+                       {"hierarchy_bytes": None}, {"accessibility_enabled_restored": False},
+                       {"accessibility_enabled_restored": None}]:
             broken = summary()
             broken["cases"][0].update({**dumped, **change})
             with self.assertRaises(SessionError, msg=change):
+                validate_summary(broken)
+        for stray in [{"hierarchy_dumps": 2}, {"accessibility_enabled_restored": True}]:
+            broken = summary()
+            broken["cases"][0].update(stray)
+            with self.assertRaises(SessionError, msg=stray):
                 validate_summary(broken)
 
 
@@ -333,28 +341,123 @@ class HierarchyTests(unittest.TestCase):
 
     def test_snapshot_keeps_only_the_size_and_requires_the_restore(self):
         baseline = {"enabled": "0", "services_present": False}
-        dump = hierarchy_snapshot(self.settings_adb(["0"]), baseline)
-        evidence = dump(self.Client(self.AVAILABLE, b"<hierarchy secret/>"))
-        self.assertEqual(evidence, {"hierarchy_frame": "hierarchy", "hierarchy_bytes": 19,
-                                    "accessibility_enabled_restored": True})
+        adb = self.settings_adb(["0"])
+        dump = hierarchy_snapshot(adb, baseline)
+        self.assertFalse(dump.attempted)
+        client = self.Client(self.AVAILABLE, b"<hierarchy secret/>")
+        evidence = dump(client)
+        # Two consecutive dumps in the same session, sizes only.
+        self.assertEqual(client.calls, ["hierarchy.dump", "hierarchy.dump"])
+        self.assertEqual(evidence, {"hierarchy_frame": "hierarchy", "hierarchy_dumps": 2,
+                                    "hierarchy_bytes": [19, 19]})
         self.assertNotIn("secret", json.dumps(evidence))
+        self.assertTrue(dump.attempted)
+        # The registration is held until the agent exits: the dumps themselves
+        # never read the setting; only the post-exit check does.
+        self.assertTrue(dump.restored_after_exit())
+        with self.assertRaises(StopIteration):
+            adb.shell([])
         with patch("smoke_hierarchy.time.sleep"):
             dump = hierarchy_snapshot(self.settings_adb(["1"] * 25), baseline)
-            with self.assertRaisesRegex(SessionError, "not restored"):
-                dump(self.Client(self.AVAILABLE, b"<x/>"))
-            # A failed snapshot still checks the restore before propagating.
-            adb = self.settings_adb(["0"])
-            with self.assertRaises(ProtocolError):
-                hierarchy_snapshot(adb, baseline)(
-                    self.Client(self.AVAILABLE, ProtocolError("timeout", "t")))
-            with self.assertRaises(StopIteration):
-                adb.shell([])
+            dump(self.Client(self.AVAILABLE, b"<x/>"))
+            self.assertFalse(dump.restored_after_exit())
+        empty = hierarchy_snapshot(self.settings_adb([]), baseline)
+        with self.assertRaisesRegex(SessionError, "empty document"):
+            empty(self.Client(self.AVAILABLE, b""))
+        # A failed dump is still marked attempted, so the restore is checked.
+        failed = hierarchy_snapshot(self.settings_adb([]), baseline)
+        with self.assertRaises(ProtocolError):
+            failed(self.Client(self.AVAILABLE, ProtocolError("timeout", "t")))
+        self.assertTrue(failed.attempted)
 
     def test_allow_hierarchy_refuses_when_accessibility_is_in_use(self):
         with patch("smoke_serve.resolve_artifact", return_value=(Path("carlo"), {})):
             for values in [["0", "svc/.Service"], ["1", "null"]]:
                 with self.assertRaisesRegex(SessionError, "accessibility service"):
                     run(self.settings_adb(values), Path("manifest.json"), False, True)
+
+    class Session:
+        """A serve session that records the order of its lifecycle steps."""
+
+        def __init__(self, events, exit_code=0):
+            self.events, self.exit_code = events, exit_code
+            self.evidence = {"session_id_length": 32, "transport": "filesystem",
+                             "socket_mode": "600"}
+            self.forward_removed = None
+
+        def start(self):
+            return {"session": SESSION}
+
+        def connect(self):
+            return None
+
+        def track(self, client):
+            return client
+
+        def finish(self):
+            self.events.append("finish")
+            return self.exit_code, b""
+
+        def socket_exists(self):
+            return False
+
+        def close(self):
+            self.events.append("close")
+            self.forward_removed = True
+
+    class Snapshots:
+        def __init__(self, events, restored=True):
+            self.events, self.restored, self.attempted = events, restored, False
+
+        def __call__(self, client):
+            self.attempted = True
+            self.events += ["dump", "dump"]
+            return {"hierarchy_frame": "hierarchy", "hierarchy_dumps": 2,
+                    "hierarchy_bytes": [10, 11]}
+
+        def restored_after_exit(self):
+            self.events.append("restored")
+            return self.restored
+
+    def serve_complete(self, snapshots, events, exercise=None, exit_code=0):
+        def complete(client, session, api, abi, dump):
+            return exercise(dump) if exercise else dump(client)
+
+        with patch("smoke_serve.ServeSession", lambda *_: self.Session(events, exit_code)), \
+                patch("smoke_serve.ControlClient", lambda _: object()), \
+                patch.dict("smoke_serve.CASES", {"complete": (complete, True)}):
+            return serve_case(None, Path("carlo"), {"android_api": 36, "abi": "arm64-v8a"},
+                              "complete", snapshots)
+
+    def test_consecutive_dumps_are_followed_by_a_restore_check_after_exit(self):
+        events = []
+        result = self.serve_complete(self.Snapshots(events), events)
+        # Both dumps share the serve session; the setting is read only after
+        # the agent has finished and its session was closed.
+        self.assertEqual(events, ["dump", "dump", "finish", "close", "restored"])
+        self.assertEqual((result["hierarchy_dumps"], result["hierarchy_bytes"]), (2, [10, 11]))
+        self.assertIs(result["accessibility_enabled_restored"], True)
+        events = []
+        with self.assertRaisesRegex(SessionError, "not restored after serve exited"):
+            self.serve_complete(self.Snapshots(events, restored=False), events)
+        self.assertEqual(events[-1], "restored")
+
+    def test_restore_is_checked_even_when_the_session_fails_after_a_dump(self):
+        events = []
+        snapshots = self.Snapshots(events)
+
+        def fail_after_dump(dump):
+            dump(None)
+            raise ProtocolError("closed", "agent went away")
+
+        with self.assertRaises(ProtocolError):
+            self.serve_complete(snapshots, events, fail_after_dump)
+        self.assertEqual(events, ["dump", "dump", "close", "restored"])
+        # No dump, no registration: nothing to check.
+        events = []
+        result = self.serve_complete(self.Snapshots(events), events, lambda dump: {})
+        self.assertEqual(events, ["finish", "close"])
+        self.assertNotIn("accessibility_enabled_restored", result)
 
 
 class CleanupTests(unittest.TestCase):

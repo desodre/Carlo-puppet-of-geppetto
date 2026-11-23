@@ -18,6 +18,7 @@ use crate::{diagnostics::Diagnostics, error::CarloError};
 use serde::Serialize;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
+    sync::atomic::AtomicBool,
     time::{Duration, Instant},
 };
 
@@ -840,12 +841,16 @@ pub(crate) fn pinned(environment: &Diagnostics, fingerprint: Option<&str>) -> bo
 }
 
 /// Snapshots for a long-lived caller (`carlo serve`): the gate is decided once
-/// and the snapshot id and generation continue across snapshots. Every snapshot
-/// registers, reads and unregisters its own session, so nothing is held between
-/// snapshots and nothing outlives this value.
+/// and the snapshot id and generation continue across snapshots. The automation
+/// session is registered lazily by the first snapshot and reused by later ones;
+/// [`teardown`](Self::teardown) (or dropping this value) unregisters it, so
+/// nothing outlives this value.
 pub(crate) struct Snapshots {
     profile: contract::Profile,
     sequence: Sequence,
+    /// `None` until the first snapshot and after teardown.
+    #[cfg(target_os = "android")]
+    session: Option<super::native::hierarchy::PersistentSession>,
 }
 
 impl Snapshots {
@@ -857,54 +862,62 @@ impl Snapshots {
             std::env::consts::ARCH,
             fingerprint,
         )
-        .map(|profile| Self {
+        .map(Self::new)
+    }
+
+    fn new(profile: contract::Profile) -> Self {
+        Self {
             profile,
             sequence: Sequence::new(Instant::now()),
-        })
+            #[cfg(target_os = "android")]
+            session: None,
+        }
     }
 
-    /// One complete document or a typed failure, and whether a termination
-    /// signal arrived while the session owned the signal handlers.
-    pub(crate) fn take(&mut self) -> (Result<Vec<u8>, Error>, bool) {
-        let (session, snapshot) = run_session(self.profile, &mut self.sequence);
-        let interrupted = session.interrupted;
-        (document(session, snapshot), interrupted)
+    /// One complete document or a typed failure with no document. `stop` is
+    /// the owner's cancellation flag; no signal handler is installed.
+    #[cfg(target_os = "android")]
+    pub(crate) fn take(&mut self, stop: &AtomicBool) -> Result<Vec<u8>, Error> {
+        let profile = self.profile;
+        self.session
+            .get_or_insert_with(|| super::native::hierarchy::PersistentSession::new(profile))
+            .take(stop, &mut self.sequence)
+    }
+
+    /// Off Android no profile passes the gate; nothing is ever registered.
+    #[cfg(not(target_os = "android"))]
+    pub(crate) fn take(&mut self, _stop: &AtomicBool) -> Result<Vec<u8>, Error> {
+        Err(Error::UnsupportedProfile)
+    }
+
+    /// Unregister the session, if one is registered, and release the exclusive
+    /// guard. Idempotent; a later [`take`](Self::take) registers again.
+    #[cfg(target_os = "android")]
+    pub(crate) fn teardown(&mut self) -> Result<(), Error> {
+        self.session
+            .take()
+            .map_or(Ok(()), |mut session| session.close())
+    }
+
+    #[cfg(not(target_os = "android"))]
+    pub(crate) fn teardown(&mut self) -> Result<(), Error> {
+        Ok(())
     }
 }
 
-#[cfg(target_os = "android")]
-fn run_session(profile: contract::Profile, sequence: &mut Sequence) -> Run {
-    super::native::hierarchy::run(profile, sequence)
-}
-
-#[cfg(not(target_os = "android"))]
-fn run_session(_: contract::Profile, _: &mut Sequence) -> Run {
-    (
-        SessionOutcome {
-            error: Some(Error::UnsupportedProfile),
-            ..SessionOutcome::default()
-        },
-        None,
+/// A failure that means the registered session itself is gone, so a
+/// long-lived owner re-opens it once: the Binder peer died (`DEAD_OBJECT`) or
+/// the system revoked the connection while a request was being made.
+pub(super) fn stale(error: &Error) -> bool {
+    /// `android::DEAD_OBJECT` (`-EPIPE`), as returned by `AIBinder_transact`.
+    const DEAD_OBJECT: i32 = -32;
+    matches!(
+        error,
+        Error::Binder {
+            status: DEAD_OBJECT,
+            ..
+        } | Error::Runtime("connection_revoked")
     )
-}
-
-/// The document only when the whole session was clean, as [`Report::passed`]:
-/// session error first, then the snapshot's, then the cleanup's.
-fn document(session: SessionOutcome, snapshot: Option<Taken>) -> Result<Vec<u8>, Error> {
-    if let Some(error) = session.error {
-        return Err(error);
-    }
-    let Some((_, result)) = snapshot else {
-        return Err(Error::Runtime("snapshot_not_taken"));
-    };
-    let document = result?;
-    if let Some(error) = session.cleanup_error {
-        return Err(error);
-    }
-    if !(session.initialized && session.unregistered) {
-        return Err(Error::Runtime("session_not_clean"));
-    }
-    Ok(document)
 }
 
 #[cfg(test)]
@@ -945,46 +958,64 @@ mod serve_gate {
         assert!(Snapshots::detect(&reference, Some(contract::FINGERPRINT)).is_none());
     }
 
-    fn clean() -> SessionOutcome {
-        SessionOutcome {
-            initialized: true,
-            unregistered: true,
-            ..SessionOutcome::default()
+    #[test]
+    fn only_a_dead_peer_or_a_revoked_connection_makes_the_session_stale() {
+        for error in [
+            Error::Binder {
+                operation: "find_node",
+                status: -32,
+            },
+            Error::Binder {
+                operation: "get_windows",
+                status: -32,
+            },
+            Error::Runtime("connection_revoked"),
+        ] {
+            assert!(stale(&error), "{error:?}");
+        }
+        // Everything else keeps the registration: snapshot-level failures are
+        // retried by the walk itself, and a cancelled or timed-out request
+        // leaves a live session.
+        for error in [
+            Error::Binder {
+                operation: "find_node",
+                status: -1,
+            },
+            Error::RemoteException {
+                operation: "get_windows",
+                code: -32,
+            },
+            Error::Runtime("connection_not_initialized"),
+            Error::Cancelled,
+            Error::Conflict,
+            Error::QueryTimeout,
+            Error::WindowGone,
+            Error::WindowsUnavailable,
+            Error::Truncated { limit: "nodes" },
+            Error::InconsistentSnapshot {
+                reason: "window_changed",
+                attempts: 3,
+            },
+        ] {
+            assert!(!stale(&error), "{error:?}");
         }
     }
 
+    /// Off Android the persistent path never registers: every take is a typed
+    /// refusal, teardown is idempotent and a take after teardown still refuses.
+    #[cfg(not(target_os = "android"))]
     #[test]
-    fn a_document_is_returned_only_from_a_clean_session() {
-        let xml = b"<hierarchy/>".to_vec();
-        let taken = || Some((Stats::default(), Ok(xml.clone())));
-        assert_eq!(document(clean(), taken()), Ok(xml.clone()));
-        let failed = SessionOutcome {
-            error: Some(Error::Conflict),
-            ..SessionOutcome::default()
-        };
-        assert_eq!(document(failed, None), Err(Error::Conflict));
-        assert_eq!(
-            document(clean(), None),
-            Err(Error::Runtime("snapshot_not_taken"))
-        );
-        let truncated = Error::Truncated { limit: "nodes" };
-        assert_eq!(
-            document(clean(), Some((Stats::default(), Err(truncated.clone())))),
-            Err(truncated)
-        );
-        let leaked = SessionOutcome {
-            cleanup_error: Some(Error::Runtime("unregister")),
-            ..clean()
-        };
-        assert_eq!(document(leaked, taken()), Err(Error::Runtime("unregister")));
-        let registered = SessionOutcome {
-            unregistered: false,
-            ..clean()
-        };
-        assert_eq!(
-            document(registered, taken()),
-            Err(Error::Runtime("session_not_clean"))
-        );
+    fn host_snapshots_refuse_and_teardown_is_idempotent() {
+        let stop = AtomicBool::new(false);
+        let mut snapshots = Snapshots::new(contract::Profile::SamsungA16xApi36);
+        for _ in 0..2 {
+            assert_eq!(snapshots.take(&stop), Err(Error::UnsupportedProfile));
+        }
+        assert_eq!(snapshots.teardown(), Ok(()));
+        assert_eq!(snapshots.teardown(), Ok(()));
+        assert_eq!(snapshots.take(&stop), Err(Error::UnsupportedProfile));
+        // No snapshot was attempted, so the numbering did not advance.
+        assert_eq!(snapshots.sequence.last_id, 0);
     }
 }
 

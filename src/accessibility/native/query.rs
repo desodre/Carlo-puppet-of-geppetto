@@ -172,10 +172,11 @@ impl Session {
             if state.closing {
                 return Err(Error::Cancelled);
             }
-            let (_, connection) = state
-                .connection
-                .as_ref()
-                .ok_or(Error::Runtime("connection_not_initialized"))?;
+            let (_, connection) = state.connection.as_ref().ok_or(if state.revoked {
+                Error::Runtime("connection_revoked")
+            } else {
+                Error::Runtime("connection_not_initialized")
+            })?;
             // SAFETY: mutex keeps original strong reference alive while taking our own.
             unsafe { (api.retain)(connection.pointer.as_ptr()) };
             Strong {
@@ -201,28 +202,42 @@ impl Session {
             .checked_add(timeout)
             .ok_or(Error::Runtime("query_deadline_overflow"))?;
         // No prefetch; single-node result callback, no cache in Carlo.
-        match self.find(Kind::Single, window, node, 0, deadline, timeout.is_zero())? {
+        match self.find(
+            Kind::Single,
+            window,
+            node,
+            0,
+            deadline,
+            timeout.is_zero(),
+            &STOP,
+        )? {
             Reply::Single(envelope) => Ok(*envelope),
             Reply::Batch(_) => Err(Error::InvalidCallback),
         }
     }
 
     /// API 36: the nodes of one answer, in wire order. An empty list is "no such
-    /// node"; the invalid-window sentinel is [`Error::WindowGone`].
+    /// node"; the invalid-window sentinel is [`Error::WindowGone`]. `stop` is the
+    /// owner's cancellation flag ([`STOP`] for one-shot commands).
     pub(super) fn query_batch(
         &mut self,
         window: i32,
         node: i64,
         prefetch: i32,
         deadline: Instant,
+        stop: &AtomicBool,
     ) -> Result<Vec<crate::accessibility::node::Node>, Error> {
         let expired = Instant::now() >= deadline;
-        match self.find(Kind::Batch, window, node, prefetch, deadline, expired)? {
+        match self.find(Kind::Batch, window, node, prefetch, deadline, expired, stop)? {
             Reply::Batch(batch) => Ok(batch.nodes),
             Reply::Single(_) => Err(Error::InvalidCallback),
         }
     }
 
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "one request's wire fields plus its deadline and cancellation flag"
+    )]
     fn find(
         &mut self,
         kind: Kind,
@@ -231,6 +246,7 @@ impl Session {
         prefetch: i32,
         deadline: Instant,
         expired: bool,
+        stop: &AtomicBool,
     ) -> Result<Reply, Error> {
         let id = self.query_ids.next()?;
         let query = Arc::new(Query {
@@ -239,7 +255,7 @@ impl Session {
             changed: Condvar::new(),
         });
         let _active = Active(query.clone()); // closes state on every early return, including transport failure
-        if STOP.load(Ordering::Relaxed) {
+        if stop.load(Ordering::Relaxed) {
             return Err(Error::Cancelled);
         }
         if expired {
@@ -272,7 +288,7 @@ impl Session {
         request.long(i64::from(unsafe { gettid() }))?;
         request.int(0)?; // null typed Bundle
         let reply = request.reply(&connection, contract::FIND_NODE, "find_node")?;
-        if STOP.load(Ordering::Relaxed) {
+        if stop.load(Ordering::Relaxed) {
             return Err(Error::Cancelled);
         }
         if Instant::now() >= deadline {
@@ -294,7 +310,7 @@ impl Session {
             .map_err(|_| Error::Runtime("query_state_poisoned"))?;
         loop {
             let now = Instant::now();
-            if let Some(result) = state.poll(now, STOP.load(Ordering::Relaxed)) {
+            if let Some(result) = state.poll(now, stop.load(Ordering::Relaxed)) {
                 return result;
             }
             (state, _) = query

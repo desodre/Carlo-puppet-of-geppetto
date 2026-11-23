@@ -21,6 +21,10 @@ pub(super) struct Slot<T> {
     pub(super) invalidations: u32,
     /// `init` deliveries with a null connection (the system revoking the session).
     pub(super) revocations: u32,
+    /// A revocation dropped the connection. Sticky: a session that saw it is
+    /// stale even if the system initializes it again, so a long-lived owner
+    /// re-opens instead of reusing it.
+    pub(super) revoked: bool,
 }
 
 impl<T> Default for Slot<T> {
@@ -32,6 +36,7 @@ impl<T> Default for Slot<T> {
             counters: Counters::default(),
             invalidations: 0,
             revocations: 0,
+            revoked: false,
         }
     }
 }
@@ -54,6 +59,18 @@ impl<T> Slot<T> {
 
     pub(super) fn close(&mut self) -> Option<(i32, T)> {
         self.closing = true;
+        self.connection.take()
+    }
+
+    /// The system revoked the session (`init` with a null connection): count it,
+    /// mark the slot revoked and hand back the dead connection, which the caller
+    /// releases after unlocking. A closing slot only counts the delivery.
+    pub(super) fn revoke(&mut self) -> Option<(i32, T)> {
+        self.revocations = self.revocations.saturating_add(1);
+        if self.closing {
+            return None;
+        }
+        self.revoked = true;
         self.connection.take()
     }
 }
@@ -118,6 +135,44 @@ mod tests {
         assert_eq!(drops.get(), 3);
         assert_eq!(slot.counters.init, 1);
         assert_eq!(slot.counters.late, 1);
+    }
+    #[test]
+    fn revocation_drops_the_connection_and_marks_the_slot_stale() {
+        let drops = Rc::new(Cell::new(0));
+        let mut slot = Slot::<Ref>::default();
+        assert!(!slot.revoked);
+        // A revocation before any init only counts and marks.
+        assert!(slot.revoke().is_none());
+        assert!(slot.revoked);
+        assert_eq!(slot.revocations, 1);
+        let mut slot = Slot::default();
+        slot.accept(3, Ref(drops.clone())).unwrap();
+        let released = slot.revoke();
+        assert_eq!(released.as_ref().map(|(id, _)| *id), Some(3));
+        assert_eq!(drops.get(), 0, "handed back, not released under the lock");
+        drop(released);
+        assert_eq!(drops.get(), 1);
+        assert!(slot.revoked && slot.connection.is_none());
+        assert_eq!((slot.revocations, slot.counters.invalid), (1, 0));
+        // A later init is a fresh connection, not a duplicate, but the slot stays
+        // revoked so its owner still knows the session was reset.
+        slot.accept(4, Ref(drops.clone())).unwrap();
+        assert!(slot.revoked);
+        assert_eq!(slot.counters.init, 2);
+        assert!(slot.revoke().is_some());
+        assert_eq!(slot.revocations, 2);
+        assert_eq!(drops.get(), 2);
+    }
+    #[test]
+    fn revocation_after_close_only_counts() {
+        let drops = Rc::new(Cell::new(0));
+        let mut slot = Slot::default();
+        slot.accept(1, Ref(drops.clone())).unwrap();
+        drop(slot.close());
+        assert!(slot.revoke().is_none());
+        assert!(!slot.revoked);
+        assert_eq!(slot.revocations, 1);
+        assert_eq!(drops.get(), 1);
     }
     struct Reader {
         binders: Vec<Option<Ref>>,

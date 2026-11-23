@@ -247,7 +247,7 @@ fn capabilities(pinned_mirror_profile: bool, pinned_hierarchy_profile: bool) -> 
             name: "binder_hierarchy",
             available: pinned_hierarchy_profile,
             reason: if pinned_hierarchy_profile {
-                "hierarchy.dump over the control channel on the pinned build; one registration per snapshot"
+                "hierarchy.dump over the control channel on the pinned build; registered lazily once per serve session, unregistered on exit"
             } else {
                 "unavailable on this target: the hierarchy is pinned to one validated build"
             },

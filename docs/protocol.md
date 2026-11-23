@@ -405,19 +405,26 @@ is ignored.
 | `timeout` | registration or a node request timed out |
 | `internal` | any other session, Binder or decoding failure |
 
-Each snapshot registers its own UiAutomation session (flags exactly 1),
-reads, and unregisters on every exit path before the answer is sent: no
-registration is held between requests or after the session. Snapshot ids and
-the geometry generation continue across one serve session. The control loop
-waits for the snapshot; other control requests and the reaction to a signal are
-delayed by up to its worst case: about 5 s for registration, plus the 10 s
-snapshot deadline, plus one in-flight `getWindows` Binder call, which is
-synchronous and cannot be cancelled (it is not bounded by the agent). While a
-snapshot runs, SIGHUP, SIGINT and SIGTERM (the same set serve handles, so
-killing the host `adb shell` is covered) are routed to the snapshot's own
-handlers: one that arrives cancels the snapshot at its next check, the
-registration is still released, and the serve session then ends as interrupted
-(exit 74). The connection continues after either answer.
+The first `hierarchy.dump` of a serve session registers one UiAutomation
+session (flags exactly 1, never suppressing the user's accessibility services)
+and later dumps reuse it, skipping registration and the `init` wait. While it
+is held, another automation client (`uiautomator`, a second agent) gets
+`conflict`, and `accessibility_enabled` stays `1`. If the system revokes the
+connection (`init` with a null connection) or a Binder call reports
+`DEAD_OBJECT`, the stale session is unregistered and released and re-opened at
+most once for that dump; a failed open keeps nothing, so the next dump tries
+again. The registration is unregistered in the serve session's teardown, which
+runs on every exit (shutdown, framing failure, signal), and by the source's
+destructor otherwise. Snapshot ids and the geometry generation continue across
+one serve session. The control loop waits for the snapshot; other control
+requests and the reaction to a signal are delayed by up to its worst case:
+about 5 s for registration (first dump or re-open only), plus the 10 s snapshot
+deadline, plus one in-flight `getWindows` Binder call, which is synchronous and
+cannot be cancelled (it is not bounded by the agent). No signal handler is
+installed for the dump: SIGHUP, SIGINT and SIGTERM stay with serve's own
+handlers and its stop flag cancels every snapshot wait at its next check; the
+registration is then released by the teardown and the serve session ends as
+interrupted (exit 74). The connection continues after either answer.
 
 The host client is `ControlClient.hierarchy_dump()` in
 `tools/carlo_protocol.py`: it returns the XML bytes and raises `ProtocolError`
@@ -431,15 +438,21 @@ is not the pinned build: `hierarchy.dump` answers `unavailable` and
 request-ID echo, every error mapping, the frame-limit and UTF-8 refusals, and
 the release of the source on shutdown, framing failure and signal are proven
 through the production control loop with a fake source injected behind the
-same trait the device source implements (test-only code); the device source,
-on the pinned build, reuses the snapshot path of `hierarchy-dump`. Not executed:
-`hierarchy.dump` over serve on any device, repeated snapshots in one serve
-process, a snapshot concurrent with a running stream. `tools/smoke_serve.py`
-requires `hierarchy.dump` to answer `unavailable` wherever `binder_hierarchy`
-is not available; where it is, it takes one snapshot only with
-`--allow-hierarchy`, refuses when an accessibility service is enabled, records
-only the frame kind and byte count, and checks that `accessibility_enabled` is
-restored.
+same trait the device source implements (test-only code), including
+consecutive dumps on one source with teardown only at the end; the device
+source, on the pinned build, reuses the snapshot walk of `hierarchy-dump` over
+a persistent registration. The revocation bookkeeping of the callback slot and
+the `DEAD_OBJECT`/revoked classification are unit-tested on the host; the
+persistent session itself (lazy registration, reuse, re-open, unregister on
+exit) is Android-only code that was **not built or executed** for this change.
+Not executed: `hierarchy.dump` over serve on any device, consecutive snapshots
+in one serve process, a revocation or dead peer while registered, a snapshot
+concurrent with a running stream. `tools/smoke_serve.py` requires
+`hierarchy.dump` to answer `unavailable` wherever `binder_hierarchy` is not
+available; where it is, with `--allow-hierarchy` it refuses when an
+accessibility service is enabled, takes two consecutive snapshots in the same
+serve session, records only the frame kind, the dump count and the byte counts,
+and checks that `accessibility_enabled` is restored after the agent has exited.
 
 Host (Linux x86_64) and one authorized physical device (Samsung API 36 arm64,
 shell, SELinux enforcing). Device evidence for the control channel is in

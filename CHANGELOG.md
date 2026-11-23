@@ -13,10 +13,19 @@
   - Gated by the exact hierarchy profile (`samsung_a16x_api36`); elsewhere,
     the host and the API 34 reference included, it answers `unavailable`
     without loading a library or making a Binder call.
-  - Each snapshot registers, reads and unregisters its own automation session;
-    no registration is held between requests. Snapshot ids and the generation
-    continue across one serve session. The hierarchy source is released in the
-    session teardown on every exit path.
+  - The automation session is registered lazily by the first dump (flags 1)
+    and reused by later dumps of the same serve session; it is unregistered in
+    the session teardown on every exit path. A revoked connection (API 36 `init`
+    with a null connection now drops it from the callback slot and marks the
+    slot revoked) or a `DEAD_OBJECT` Binder status closes the stale session and
+    re-opens it at most once per dump. Dumps use serve's own stop flag; the
+    one-shot commands keep their signal handlers. **The persistent path is
+    host-tested only (unit tests of the slot, the stale classification and the
+    control loop with a fake source); it was not built or run on a device.**
+    Snapshot ids and the generation continue across one serve session.
+  - `tools/smoke_serve.py --allow-hierarchy` takes two consecutive dumps in one
+    serve session (count and byte sizes only) and checks `accessibility_enabled`
+    after the agent has exited.
   - `binder_hierarchy` is now computed from that same gate: `true` only on the
     pinned API 36 build, `false` on the host and the API 34 reference.
   - `ControlClient.hierarchy_dump()` in `tools/carlo_protocol.py` returns the

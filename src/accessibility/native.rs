@@ -357,14 +357,20 @@ impl Shared {
             self.changed.notify_all();
         }
     }
+    /// One-shot commands: cancelled by the process signals of [`Signals`].
     fn wait_init(&self) -> Result<i32, Error> {
+        self.wait_init_with_stop(&STOP)
+    }
+    /// Bounded wait for `init`, cancelled by `stop` (the caller's own flag, so a
+    /// long-lived owner never has to install or replace [`Signals`]).
+    fn wait_init_with_stop(&self, stop: &AtomicBool) -> Result<i32, Error> {
         let deadline = Instant::now() + Duration::from_secs(5);
         let mut slot = self
             .slot
             .lock()
             .map_err(|_| Error::Runtime("callback_state_poisoned"))?;
         loop {
-            if STOP.load(Ordering::Relaxed) {
+            if stop.load(Ordering::Relaxed) {
                 return Err(Error::Cancelled);
             }
             if let Some(error) = &slot.error {
@@ -490,14 +496,17 @@ fn dispatch(binder: *mut Binder, code: u32, parcel: *const Parcel) -> i32 {
         }
     };
     let invalid_before = slot.counters.invalid;
+    // A revoked connection, released only after the slot is unlocked (as `closing`).
+    let mut revoked = None;
     let result = match code {
         contract::INIT if shared.profile == Profile::SamsungA16xApi36 => {
             // This build calls init again with a null connection while it resets
             // the session; that is a revocation notice, not a malformed callback.
+            // The dead connection leaves the slot so no request reuses it.
             match decode_init_nullable(&mut reader) {
                 Ok(Some((id, connection))) => slot.accept(id, connection),
                 Ok(None) => {
-                    slot.revocations = slot.revocations.saturating_add(1);
+                    revoked = slot.revoke();
                     Ok(())
                 }
                 Err(error) => Err(error),
@@ -526,6 +535,8 @@ fn dispatch(binder: *mut Binder, code: u32, parcel: *const Parcel) -> i32 {
         shared.changed.notify_all();
         return -22;
     }
+    drop(slot);
+    drop(revoked);
     shared.changed.notify_all();
     0
 }

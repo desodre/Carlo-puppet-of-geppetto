@@ -6,10 +6,11 @@ commands without a video channel, unknown frame kind, shutdown), one with a
 wrong session identifier and one with a bad magic. The video channel itself is
 proven by `smoke_video_stream.py`.
 Where `binder_hierarchy` is not available, `hierarchy.dump` must answer
-`unavailable`. Where it is, one snapshot is taken only with `--allow-hierarchy`:
-the run refuses when an accessibility service is enabled, records only the frame
-kind and byte count (the XML is screen contents and is never kept or printed)
-and checks that `accessibility_enabled` is restored afterwards.
+`unavailable`. Where it is, two consecutive snapshots are taken in the same
+session only with `--allow-hierarchy`: the run refuses when an accessibility
+service is enabled, records only the frame kind, dump count and byte counts (the
+XML is screen contents and is never kept or printed) and checks that
+`accessibility_enabled` is restored once the agent has exited and unregistered.
 The agent chooses the transport and says so on its ready line: a socket file,
 exposed with `adb forward tcp:0 localfilesystem:<path>`, or (only when the
 platform denies creating that file) an abstract socket, exposed with
@@ -41,26 +42,40 @@ __all__ = [
 RESERVED = ("display.info", "stats")
 # What `hierarchy.dump` proved in the complete session.
 HIERARCHY_OUTCOMES = ("unavailable", "not_requested", "dumped")
+# Consecutive dumps in one serve session: the second reuses the registration.
+HIERARCHY_DUMPS = 2
 
 
 def unknown_kind_frame(request_id: int) -> bytes:
     return HEADER.pack(MAGIC, VERSION, 200, 0, request_id, 5) + b"later"
 
 
-def hierarchy_snapshot(adb: Adb, baseline: dict):
-    """One `hierarchy.dump` that keeps only the frame kind and byte count."""
+class HierarchySnapshots:
+    """Consecutive `hierarchy.dump`s in one serve session, keeping only byte counts.
 
-    def dump(client) -> dict:
-        try:
-            size = len(client.hierarchy_dump())
-        finally:
-            back = restored(adb, baseline)
-        require(back, "accessibility_enabled was not restored after hierarchy.dump")
-        require(size > 0, "hierarchy.dump answered an empty document")
-        return {"hierarchy_frame": "hierarchy", "hierarchy_bytes": size,
-                "accessibility_enabled_restored": True}
+    The agent registers once, on the first dump, and keeps that registration
+    until it exits, so `accessibility_enabled` is checked only after the agent
+    has exited (`restored_after_exit`), never between dumps.
+    """
 
-    return dump
+    def __init__(self, adb: Adb, baseline: dict):
+        self.adb, self.baseline = adb, baseline
+        # Set before the first request: even a failed dump may have registered.
+        self.attempted = False
+
+    def __call__(self, client) -> dict:
+        self.attempted = True
+        sizes = [len(client.hierarchy_dump()) for _ in range(HIERARCHY_DUMPS)]
+        require(all(size > 0 for size in sizes), "hierarchy.dump answered an empty document")
+        return {"hierarchy_frame": "hierarchy", "hierarchy_dumps": len(sizes),
+                "hierarchy_bytes": sizes}
+
+    def restored_after_exit(self) -> bool:
+        return restored(self.adb, self.baseline)
+
+
+def hierarchy_snapshot(adb: Adb, baseline: dict) -> HierarchySnapshots:
+    return HierarchySnapshots(adb, baseline)
 
 
 def exercise_complete(client, session, api, abi, dump=None) -> dict:
@@ -198,8 +213,16 @@ def serve_case(adb: Adb, binary: Path, device: dict, name: str, dump=None) -> di
             session.close()
         finally:
             result["forward_removed"] = session.forward_removed
+            # The registration lives as long as the agent: only once it has
+            # exited (or been stopped) can the setting be back. Checked on every
+            # path that dumped; a failure above still propagates first.
+            if dump is not None and dump.attempted:
+                result["accessibility_enabled_restored"] = dump.restored_after_exit()
     result["cleanup_removed"] = True
     require(result["forward_removed"] is True, "adb forward was not removed")
+    if "accessibility_enabled_restored" in result:
+        require(result["accessibility_enabled_restored"],
+                "accessibility_enabled was not restored after serve exited")
     return result
 
 
@@ -246,16 +269,20 @@ def validate_summary(summary: dict) -> dict:
         "hierarchy.dump outcome disagrees with the binder_hierarchy capability",
     )
     if hierarchy == "dumped":
-        size = complete.get("hierarchy_bytes")
+        sizes = complete.get("hierarchy_bytes")
         require(
             complete.get("hierarchy_frame") == "hierarchy"
-            and isinstance(size, int) and not isinstance(size, bool) and size > 0
+            and complete.get("hierarchy_dumps") == HIERARCHY_DUMPS
+            and isinstance(sizes, list) and len(sizes) == HIERARCHY_DUMPS
+            and all(isinstance(size, int) and not isinstance(size, bool) and size > 0
+                    for size in sizes)
             and complete.get("accessibility_enabled_restored") is True,
-            "hierarchy snapshot lacks frame, size or restore evidence",
+            "hierarchy snapshots lack frame, count, sizes or post-exit restore evidence",
         )
     else:
         require(
-            not {"hierarchy_frame", "hierarchy_bytes"} & set(complete),
+            not {"hierarchy_frame", "hierarchy_dumps", "hierarchy_bytes",
+                 "accessibility_enabled_restored"} & set(complete),
             "hierarchy evidence recorded without a snapshot",
         )
     require(
@@ -309,8 +336,9 @@ def main():
     parser.add_argument("--allow-physical", action="store_true",
                         help="the owner authorized this physical device for this run")
     parser.add_argument("--allow-hierarchy", action="store_true",
-                        help="take one hierarchy.dump snapshot where binder_hierarchy is "
-                             "available (refused while an accessibility service is enabled)")
+                        help="take two consecutive hierarchy.dump snapshots in one session "
+                             "where binder_hierarchy is available (refused while an "
+                             "accessibility service is enabled)")
     args = parser.parse_args()
     manifest = args.manifest.resolve()
     summary, failure = run(Adb(args.serial), manifest, args.allow_physical,
