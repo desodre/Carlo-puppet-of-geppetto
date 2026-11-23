@@ -815,6 +815,179 @@ fn run(_: contract::Profile) -> Run {
     unreachable!("profile requires Android")
 }
 
+/// The hierarchy's exact gate: a pinned profile that carries the window-list
+/// contract. Pure comparisons; nothing is loaded and no Binder call is made.
+fn gated(
+    shell_api: Option<u32>,
+    effective_uid: Option<u32>,
+    architecture: &str,
+    fingerprint: Option<&str>,
+) -> Option<contract::Profile> {
+    contract::Profile::select(shell_api, effective_uid, architecture, fingerprint)
+        .filter(|profile| profile.hierarchy())
+}
+
+/// Whether this process is on the pinned hierarchy profile (`binder_hierarchy`).
+/// False on the host and on the API 34 reference.
+pub(crate) fn pinned(environment: &Diagnostics, fingerprint: Option<&str>) -> bool {
+    gated(
+        environment.shell_api(),
+        environment.effective_uid(),
+        std::env::consts::ARCH,
+        fingerprint,
+    )
+    .is_some()
+}
+
+/// Snapshots for a long-lived caller (`carlo serve`): the gate is decided once
+/// and the snapshot id and generation continue across snapshots. Every snapshot
+/// registers, reads and unregisters its own session, so nothing is held between
+/// snapshots and nothing outlives this value.
+pub(crate) struct Snapshots {
+    profile: contract::Profile,
+    sequence: Sequence,
+}
+
+impl Snapshots {
+    /// `None` off the pinned hierarchy profile; then nothing was opened.
+    pub(crate) fn detect(environment: &Diagnostics, fingerprint: Option<&str>) -> Option<Self> {
+        gated(
+            environment.shell_api(),
+            environment.effective_uid(),
+            std::env::consts::ARCH,
+            fingerprint,
+        )
+        .map(|profile| Self {
+            profile,
+            sequence: Sequence::new(Instant::now()),
+        })
+    }
+
+    /// One complete document or a typed failure, and whether a termination
+    /// signal arrived while the session owned the signal handlers.
+    pub(crate) fn take(&mut self) -> (Result<Vec<u8>, Error>, bool) {
+        let (session, snapshot) = run_session(self.profile, &mut self.sequence);
+        let interrupted = session.interrupted;
+        (document(session, snapshot), interrupted)
+    }
+}
+
+#[cfg(target_os = "android")]
+fn run_session(profile: contract::Profile, sequence: &mut Sequence) -> Run {
+    super::native::hierarchy::run(profile, sequence)
+}
+
+#[cfg(not(target_os = "android"))]
+fn run_session(_: contract::Profile, _: &mut Sequence) -> Run {
+    (
+        SessionOutcome {
+            error: Some(Error::UnsupportedProfile),
+            ..SessionOutcome::default()
+        },
+        None,
+    )
+}
+
+/// The document only when the whole session was clean, as [`Report::passed`]:
+/// session error first, then the snapshot's, then the cleanup's.
+fn document(session: SessionOutcome, snapshot: Option<Taken>) -> Result<Vec<u8>, Error> {
+    if let Some(error) = session.error {
+        return Err(error);
+    }
+    let Some((_, result)) = snapshot else {
+        return Err(Error::Runtime("snapshot_not_taken"));
+    };
+    let document = result?;
+    if let Some(error) = session.cleanup_error {
+        return Err(error);
+    }
+    if !(session.initialized && session.unregistered) {
+        return Err(Error::Runtime("session_not_clean"));
+    }
+    Ok(document)
+}
+
+#[cfg(test)]
+mod serve_gate {
+    use super::*;
+
+    const SAMSUNG: Option<&str> = Some(contract::SAMSUNG_A16X_FINGERPRINT);
+
+    #[test]
+    fn only_the_pinned_api36_profile_passes_the_hierarchy_gate() {
+        assert_eq!(
+            gated(Some(36), Some(2000), "aarch64", SAMSUNG),
+            Some(contract::Profile::SamsungA16xApi36)
+        );
+        for (api, uid, arch, fingerprint) in [
+            // The API 34 reference has a session profile but no window contract.
+            (Some(34), Some(2000), "x86_64", Some(contract::FINGERPRINT)),
+            (Some(36), Some(0), "aarch64", SAMSUNG),
+            (Some(36), Some(2000), "x86_64", SAMSUNG),
+            (Some(35), Some(2000), "aarch64", SAMSUNG),
+            (Some(36), Some(2000), "aarch64", None),
+            (None, None, "x86_64", None),
+        ] {
+            assert_eq!(gated(api, uid, arch, fingerprint), None);
+        }
+        let host = Diagnostics::from_environment("linux", "x86_64", None, None, Some(1000), None);
+        assert!(!pinned(&host, SAMSUNG));
+        assert!(Snapshots::detect(&host, SAMSUNG).is_none());
+        let reference = Diagnostics::from_environment(
+            "android",
+            "x86_64",
+            Some(34),
+            Some("x86_64".into()),
+            Some(2000),
+            None,
+        );
+        assert!(!pinned(&reference, Some(contract::FINGERPRINT)));
+        assert!(Snapshots::detect(&reference, Some(contract::FINGERPRINT)).is_none());
+    }
+
+    fn clean() -> SessionOutcome {
+        SessionOutcome {
+            initialized: true,
+            unregistered: true,
+            ..SessionOutcome::default()
+        }
+    }
+
+    #[test]
+    fn a_document_is_returned_only_from_a_clean_session() {
+        let xml = b"<hierarchy/>".to_vec();
+        let taken = || Some((Stats::default(), Ok(xml.clone())));
+        assert_eq!(document(clean(), taken()), Ok(xml.clone()));
+        let failed = SessionOutcome {
+            error: Some(Error::Conflict),
+            ..SessionOutcome::default()
+        };
+        assert_eq!(document(failed, None), Err(Error::Conflict));
+        assert_eq!(
+            document(clean(), None),
+            Err(Error::Runtime("snapshot_not_taken"))
+        );
+        let truncated = Error::Truncated { limit: "nodes" };
+        assert_eq!(
+            document(clean(), Some((Stats::default(), Err(truncated.clone())))),
+            Err(truncated)
+        );
+        let leaked = SessionOutcome {
+            cleanup_error: Some(Error::Runtime("unregister")),
+            ..clean()
+        };
+        assert_eq!(document(leaked, taken()), Err(Error::Runtime("unregister")));
+        let registered = SessionOutcome {
+            unregistered: false,
+            ..clean()
+        };
+        assert_eq!(
+            document(registered, taken()),
+            Err(Error::Runtime("session_not_clean"))
+        );
+    }
+}
+
 /// Runs on the device through the same gate as the commands. On the pinned
 /// hierarchy build it registers and reads the screen; everywhere else it proves
 /// the refusal. Prints counters only.

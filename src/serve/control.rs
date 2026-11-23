@@ -2,17 +2,20 @@
 //!
 //! Responses are built only from constants and this build's own data. Nothing a
 //! client sends is ever copied into a response or into a diagnostic. The video
-//! commands are delegated to [`Video`], which owns the second channel.
+//! commands are delegated to [`Video`], which owns the second channel;
+//! `hierarchy.dump` to a [`HierarchySource`], whose document is the only
+//! response that is not a control frame.
 
 use serde_json::{Value, json};
 
+use super::hierarchy::{self, HierarchySource};
 use super::socket::ControlSocket;
 use super::video::Video;
 use crate::diagnostics::Diagnostics;
 use crate::protocol::{Frame, Kind, VERSION};
 
 /// Commands reserved by the plan that have no implementation behind them yet.
-const RESERVED: [&str; 3] = ["hierarchy.dump", "display.info", "stats"];
+const RESERVED: [&str; 2] = ["display.info", "stats"];
 
 /// What the connection owner must do after sending a response.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -25,11 +28,19 @@ pub(super) enum Next {
     Reject(&'static str),
 }
 
-/// A response payload for the request ID it answers.
+/// A response payload of `kind` for the request ID it answers. A hierarchy
+/// payload is screen contents: deliberately not `Debug`.
 pub(super) struct Reply {
+    pub kind: Kind,
     pub request_id: u32,
     pub payload: Vec<u8>,
     pub next: Next,
+}
+
+/// A response body before encoding.
+enum Body {
+    Json(Value),
+    Hierarchy(Vec<u8>),
 }
 
 /// Handshake state for the single accepted client. Deliberately not `Debug`:
@@ -40,12 +51,18 @@ pub(super) struct Control {
     capabilities: Value,
     initialized: bool,
     video: Video,
+    hierarchy: Box<dyn HierarchySource>,
 }
 
 impl Control {
     /// `session` is the identifier printed on the ready line; identity and
     /// capabilities come from the same [`Diagnostics`] that `doctor` reports.
-    pub(super) fn new(session: String, diagnostics: &Diagnostics, video: Video) -> Self {
+    pub(super) fn new(
+        session: String,
+        diagnostics: &Diagnostics,
+        video: Video,
+        hierarchy: Box<dyn HierarchySource>,
+    ) -> Self {
         let capabilities =
             serde_json::to_value(diagnostics.capabilities()).unwrap_or_else(|_| json!([]));
         let hello = json!({
@@ -69,6 +86,7 @@ impl Control {
             capabilities,
             initialized: false,
             video,
+            hierarchy,
         }
     }
 
@@ -78,9 +96,11 @@ impl Control {
         self.video.listen(listener, self.session.clone());
     }
 
-    /// Stop any stream, close the video channel and the listener. Bounded.
+    /// Stop any stream, close the video channel and the listener, release the
+    /// hierarchy source. Bounded.
     pub(super) fn teardown(&mut self) {
         self.video.shutdown();
+        self.hierarchy.teardown();
     }
 
     /// Whether a `hello` has succeeded on this connection.
@@ -90,17 +110,21 @@ impl Control {
 
     /// Answer one frame. Never panics on client data and never echoes it.
     pub(super) fn handle(&mut self, frame: &Frame) -> Reply {
-        let (body, next) = self.respond(frame);
+        let (kind, payload, next) = match self.respond(frame) {
+            (Body::Json(body), next) => (Kind::Control, body.to_string().into_bytes(), next),
+            (Body::Hierarchy(document), next) => (Kind::Hierarchy, document, next),
+        };
         Reply {
+            kind,
             request_id: frame.request_id,
-            payload: body.to_string().into_bytes(),
+            payload,
             next,
         }
     }
 
-    fn respond(&mut self, frame: &Frame) -> (Value, Next) {
+    fn respond(&mut self, frame: &Frame) -> (Body, Next) {
         if frame.kind != Kind::Control {
-            return (failure("unexpected_kind"), Next::Continue);
+            return (Body::Json(failure("unexpected_kind")), Next::Continue);
         }
         // Non-UTF-8 and over-nested input fail here; serde_json bounds recursion.
         let request = serde_json::from_slice::<Value>(&frame.payload).ok();
@@ -110,12 +134,28 @@ impl Control {
             .and_then(|object| object.get("command"))
             .and_then(Value::as_str)
         else {
-            return (failure("invalid_request"), Next::Continue);
+            return (Body::Json(failure("invalid_request")), Next::Continue);
         };
         let request = request.as_ref().unwrap_or(&Value::Null);
-        if !self.initialized {
-            return self.handshake(command, request);
+        let (body, next) = if !self.initialized {
+            self.handshake(command, request)
+        } else if command == "hierarchy.dump" {
+            return (self.dump(), Next::Continue);
+        } else {
+            self.command(frame.request_id, command, request)
+        };
+        (Body::Json(body), next)
+    }
+
+    /// One snapshot: the document, or a control error with a stable code.
+    fn dump(&mut self) -> Body {
+        match hierarchy::answer(self.hierarchy.dump()) {
+            hierarchy::Answer::Document(document) => Body::Hierarchy(document),
+            hierarchy::Answer::Failure(code) => Body::Json(failure(code)),
         }
+    }
+
+    fn command(&mut self, request_id: u32, command: &str, request: &Value) -> (Value, Next) {
         match command {
             "hello" => (failure("already_initialized"), Next::Continue),
             "ping" => (json!({ "ok": true }), Next::Continue),
@@ -128,7 +168,7 @@ impl Control {
                 json!({ "ok": true, "video": self.video.channel() }),
                 Next::Continue,
             ),
-            "video.start" => (self.video.start(frame.request_id, request), Next::Continue),
+            "video.start" => (self.video.start(request_id, request), Next::Continue),
             "video.stop" => (self.video.stop(), Next::Continue),
             name if RESERVED.contains(&name) => (failure("unavailable"), Next::Continue),
             _ => (failure("unknown_command"), Next::Continue),
@@ -181,10 +221,17 @@ pub(super) fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
 mod tests {
     use super::*;
 
+    use crate::accessibility::Error;
+    use crate::serve::hierarchy::fake::Fake;
+
     const SESSION: &str = "00112233445566778899aabbccddeeff";
     const SENTINEL: &str = "CLIENT_SUPPLIED_SENTINEL";
 
     fn control() -> Control {
+        with_source(Fake::default())
+    }
+
+    fn with_source(source: Fake) -> Control {
         let diagnostics = Diagnostics::from_environment(
             "android",
             "x86_64",
@@ -193,7 +240,40 @@ mod tests {
             Some(2000),
             None,
         );
-        Control::new(SESSION.into(), &diagnostics, Video::unattached())
+        Control::new(
+            SESSION.into(),
+            &diagnostics,
+            Video::unattached(),
+            Box::new(source),
+        )
+    }
+
+    fn initialized_with(source: Fake) -> Control {
+        let mut control = with_source(source);
+        let (body, next, _) = send(&mut control, 1, &hello(SESSION));
+        assert_eq!((body["ok"].as_bool(), next), (Some(true), Next::Continue));
+        control
+    }
+
+    fn dump(control: &mut Control, request_id: u32) -> Reply {
+        let request = json!({ "command": "hierarchy.dump", "argument": SENTINEL }).to_string();
+        let reply = control.handle(&Frame {
+            kind: Kind::Control,
+            request_id,
+            payload: request.into_bytes(),
+        });
+        assert_eq!((reply.request_id, reply.next), (request_id, Next::Continue));
+        reply
+    }
+
+    fn control_code(reply: &Reply) -> String {
+        assert_eq!(reply.kind, Kind::Control);
+        let text = std::str::from_utf8(&reply.payload).unwrap();
+        // Neither the client's strings nor any UI content reach an error.
+        assert!(!text.contains(SENTINEL) && !text.contains(SESSION));
+        assert!(!text.contains('<'));
+        let body: Value = serde_json::from_str(text).unwrap();
+        code(&body).to_owned()
     }
 
     fn send(control: &mut Control, request_id: u32, payload: &[u8]) -> (Value, Next, String) {
@@ -202,7 +282,7 @@ mod tests {
             request_id,
             payload: payload.to_vec(),
         });
-        assert_eq!(reply.request_id, request_id);
+        assert_eq!((reply.kind, reply.request_id), (Kind::Control, request_id));
         let text = String::from_utf8(reply.payload).unwrap();
         assert!(!text.contains(SENTINEL) && !text.contains(SESSION));
         (serde_json::from_str(&text).unwrap(), reply.next, text)
@@ -259,7 +339,12 @@ mod tests {
             );
         }
         let host = Diagnostics::from_environment("linux", "x86_64", None, None, Some(1000), None);
-        let mut control = Control::new(SESSION.into(), &host, Video::unattached());
+        let mut control = Control::new(
+            SESSION.into(),
+            &host,
+            Video::unattached(),
+            Box::new(Fake::default()),
+        );
         let (body, _, _) = send(&mut control, 1, &hello(SESSION));
         assert!(body["device"]["android_api"].is_null() && body["device"]["abi"].is_null());
     }
@@ -431,6 +516,134 @@ mod tests {
                 .len()
                 < limit / 8
         );
+    }
+
+    #[test]
+    fn hierarchy_dump_answers_raw_xml_on_a_hierarchy_frame_with_the_request_id() {
+        let xml = "<?xml version='1.0' encoding='UTF-8'?><hierarchy rotation=\"0\"/>";
+        let mut source = Fake::default();
+        source.results.push_back(Ok(xml.as_bytes().to_vec()));
+        source.results.push_back(Ok(b"<hierarchy/>".to_vec()));
+        let dumps = source.dumps.clone();
+        let mut control = initialized_with(source);
+        let reply = dump(&mut control, 0xFEED_F00D);
+        assert_eq!(reply.kind, Kind::Hierarchy);
+        // Raw bytes, never JSON or Base64.
+        assert_eq!(reply.payload, xml.as_bytes());
+        let reply = dump(&mut control, 2);
+        assert_eq!(reply.kind, Kind::Hierarchy);
+        assert_eq!(reply.payload, b"<hierarchy/>");
+        assert_eq!(dumps.get(), 2);
+        // The connection keeps working after a document.
+        let (body, next, _) = send(&mut control, 3, br#"{"command":"ping"}"#);
+        assert_eq!((body, next), (json!({"ok": true}), Next::Continue));
+    }
+
+    #[test]
+    fn hierarchy_dump_failures_are_control_errors_with_stable_codes() {
+        let cases = [
+            (Error::UnsupportedProfile, "unavailable"),
+            (Error::Conflict, "conflict"),
+            (Error::WindowsUnavailable, "windows_unavailable"),
+            (
+                Error::InconsistentSnapshot {
+                    reason: "window_changed",
+                    attempts: 3,
+                },
+                "inconsistent_snapshot",
+            ),
+            (Error::Truncated { limit: "xml_bytes" }, "truncated"),
+            (
+                Error::UnsupportedNode {
+                    class: "text",
+                    count: 1,
+                },
+                "unsupported_node",
+            ),
+            (Error::InitializationTimeout, "timeout"),
+            (Error::QueryTimeout, "timeout"),
+            (
+                Error::RemoteException {
+                    operation: "get_windows",
+                    code: -3,
+                },
+                "internal",
+            ),
+            (Error::Runtime("snapshot_sequence_poisoned"), "internal"),
+        ];
+        let expected: Vec<_> = cases.iter().map(|(_, code)| *code).collect();
+        let source = Fake {
+            results: cases.into_iter().map(|(error, _)| Err(error)).collect(),
+            ..Fake::default()
+        };
+        let mut control = initialized_with(source);
+        for (id, expected) in (10..).zip(expected) {
+            assert_eq!(control_code(&dump(&mut control, id)), expected);
+        }
+        // A document that cannot be sent is refused, not cut.
+        let too_large = vec![b'a'; Kind::Hierarchy.max_payload() as usize + 1];
+        let mut control = initialized_with(Fake {
+            results: [Ok(too_large), Ok(b"<a>\xff</a>".to_vec())].into(),
+            ..Fake::default()
+        });
+        assert_eq!(control_code(&dump(&mut control, 1)), "truncated");
+        assert_eq!(control_code(&dump(&mut control, 2)), "internal");
+    }
+
+    #[test]
+    fn hierarchy_dump_needs_the_handshake_and_a_control_frame() {
+        let source = Fake::default();
+        let dumps = source.dumps.clone();
+        let mut control = with_source(source);
+        let reply = control.handle(&Frame {
+            kind: Kind::Control,
+            request_id: 4,
+            payload: br#"{"command":"hierarchy.dump"}"#.to_vec(),
+        });
+        assert_eq!(
+            (reply.request_id, reply.next, reply.kind),
+            (4, Next::Reject("handshake_required"), Kind::Control)
+        );
+        let body: Value = serde_json::from_slice(&reply.payload).unwrap();
+        assert_eq!(code(&body), "handshake_required");
+        assert!(!control.initialized());
+        assert_eq!(dumps.get(), 0);
+        let mut control = initialized_with(Fake {
+            dumps: dumps.clone(),
+            ..Fake::default()
+        });
+        let reply = control.handle(&Frame {
+            kind: Kind::Hierarchy,
+            request_id: 5,
+            payload: br#"{"command":"hierarchy.dump"}"#.to_vec(),
+        });
+        assert_eq!(reply.kind, Kind::Control);
+        let body: Value = serde_json::from_slice(&reply.payload).unwrap();
+        assert_eq!(code(&body), "unexpected_kind");
+        assert_eq!(dumps.get(), 0);
+    }
+
+    #[test]
+    fn teardown_releases_the_hierarchy_source_on_every_exit() {
+        // Shutdown, a rejected handshake and an abnormal end all reach teardown,
+        // which `serve::run` calls once whatever ended the conversation.
+        for request in [
+            br#"{"command":"shutdown"}"#.to_vec(),
+            hello(SENTINEL),
+            b"{".to_vec(),
+        ] {
+            let source = Fake::default();
+            let teardowns = source.teardowns.clone();
+            let mut control = if request == hello(SENTINEL) {
+                with_source(source)
+            } else {
+                initialized_with(source)
+            };
+            let _ = control.handle(&frame(&request));
+            assert_eq!(teardowns.get(), 0);
+            control.teardown();
+            assert_eq!(teardowns.get(), 1);
+        }
     }
 
     fn frame(payload: &[u8]) -> Frame {

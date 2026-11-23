@@ -683,35 +683,45 @@ unsafe extern "C" fn signal_handler(_: i32) {
 unsafe extern "C" {
     fn signal(number: i32, handler: usize) -> usize;
 }
+/// SIGHUP, SIGINT, SIGTERM: the set serve handles, so killing the host `adb shell`
+/// (SIGHUP) cancels a running snapshot like an interrupt does.
+const SIGNALS: [(i32, &str); 3] = [
+    (1, "sighup_handler_install_failed"),
+    (2, "sigint_handler_install_failed"),
+    (15, "sigterm_handler_install_failed"),
+];
 struct Signals {
-    old_int: usize,
-    old_term: usize,
+    old: [usize; SIGNALS.len()],
+    /// Dispositions installed so far; only these are restored on drop.
+    installed: usize,
 }
 impl Signals {
     fn install() -> Result<Self, Error> {
         STOP.store(false, Ordering::Relaxed);
-        // SAFETY: signal handler only does a lock-free atomic store. The CLI has
-        // one active proof; handlers are restored after explicit unregister.
-        let old_int = unsafe { signal(2, signal_handler as *const () as usize) };
-        if old_int == usize::MAX {
-            return Err(Error::Runtime("sigint_handler_install_failed"));
+        let mut signals = Self {
+            old: [0; SIGNALS.len()],
+            installed: 0,
+        };
+        for (number, failure) in SIGNALS {
+            // SAFETY: signal handler only does a lock-free atomic store. The CLI has
+            // one active proof; every saved disposition is restored on drop, which
+            // also undoes a partial install when a later one fails.
+            let old = unsafe { signal(number, signal_handler as *const () as usize) };
+            if old == usize::MAX {
+                return Err(Error::Runtime(failure));
+            }
+            signals.old[signals.installed] = old;
+            signals.installed += 1;
         }
-        // SAFETY: same static handler; all dispositions are saved/restored.
-        let old_term = unsafe { signal(15, signal_handler as *const () as usize) };
-        if old_term == usize::MAX {
-            // SAFETY: restore exactly the prior disposition returned by signal.
-            unsafe { signal(2, old_int) };
-            return Err(Error::Runtime("sigterm_handler_install_failed"));
-        }
-        Ok(Self { old_int, old_term })
+        Ok(signals)
     }
 }
 impl Drop for Signals {
     fn drop(&mut self) {
-        // SAFETY: restore the original dispositions, no pointers to Rust stack data.
-        unsafe {
-            signal(2, self.old_int);
-            signal(15, self.old_term);
+        for index in (0..self.installed).rev() {
+            // SAFETY: restore exactly the prior disposition returned by signal;
+            // no pointers to Rust stack data.
+            unsafe { signal(SIGNALS[index].0, self.old[index]) };
         }
     }
 }

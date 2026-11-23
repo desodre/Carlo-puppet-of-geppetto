@@ -21,8 +21,8 @@ from android_session import LAUNCH, ROOT, SessionError
 from carlo_protocol import CONTROL, ControlClient, ProtocolError, encode, read_frame
 from smoke_serve import (
     CASES, ExposureError, exercise_bad_magic, exercise_complete, exercise_wrong_session,
-    forward_target, parse_forward_port, parse_ready, read_line, run, sanitise, serve_case,
-    validate_hello, validate_summary,
+    forward_target, hierarchy_snapshot, parse_forward_port, parse_ready, read_line, run,
+    sanitise, serve_case, validate_hello, validate_summary,
 )
 
 DIRECTORY = "/data/local/tmp/carlo-" + "a" * 32
@@ -57,8 +57,9 @@ def case(name, transport="filesystem", **changes):
     if name == "complete":
         result.update({"hello_ok": True, "capabilities": 4, "capabilities_available": 1,
                        "serve_protocol_available": True,
+                       "binder_hierarchy_available": False, "hierarchy": "unavailable",
                        "video_without_channel": "video_channel_absent",
-                       "reserved_unavailable": 3,
+                       "reserved_unavailable": 2,
                        "unknown_kind_recovered": True, "requests": 13})
     else:
         result.update({"rejected": {"wrong_session": "invalid_session"}.get(name, name),
@@ -239,7 +240,10 @@ class ParsingTests(unittest.TestCase):
         for index, change in [
             (0, {"hello_ok": False}), (0, {"serve_protocol_available": False}),
             (0, {"video_without_channel": None}), (0, {"unknown_kind_recovered": False}),
-            (0, {"reserved_unavailable": 2}), (0, {"exit_code": 74}), (1, {"exit_code": 0}),
+            (0, {"reserved_unavailable": 3}), (0, {"exit_code": 74}), (1, {"exit_code": 0}),
+            (0, {"hierarchy": None}), (0, {"hierarchy": "not_requested"}),
+            (0, {"binder_hierarchy_available": True}), (0, {"binder_hierarchy_available": None}),
+            (0, {"hierarchy_bytes": 10}),
             (1, {"rejected": "bad_magic"}), (2, {"rejected": None}),
             (2, {"forward_removed": False}), (1, {"cleanup_removed": False}),
             (0, {"socket_present_after_exit": True}), (2, {"session_id_length": 16}),
@@ -256,6 +260,101 @@ class ParsingTests(unittest.TestCase):
             mutate(broken)
             with self.assertRaises(SessionError):
                 validate_summary(broken)
+
+    def test_summary_accepts_each_hierarchy_outcome_only_with_its_evidence(self):
+        dumped = {"binder_hierarchy_available": True, "hierarchy": "dumped",
+                  "hierarchy_frame": "hierarchy", "hierarchy_bytes": 2048,
+                  "accessibility_enabled_restored": True}
+        for change in [{"binder_hierarchy_available": True, "hierarchy": "not_requested"},
+                       dumped]:
+            valid = summary()
+            valid["cases"][0].update(change)
+            self.assertIs(validate_summary(valid), valid)
+        for change in [{"hierarchy": "unavailable"}, {"hierarchy_frame": "control"},
+                       {"hierarchy_bytes": 0}, {"hierarchy_bytes": True},
+                       {"hierarchy_bytes": None}, {"accessibility_enabled_restored": False}]:
+            broken = summary()
+            broken["cases"][0].update({**dumped, **change})
+            with self.assertRaises(SessionError, msg=change):
+                validate_summary(broken)
+
+
+class HierarchyTests(unittest.TestCase):
+    """The snapshot path of the complete session, with a fake client and device."""
+
+    class Client:
+        def __init__(self, capabilities, answer):
+            self.capabilities, self.answer, self.calls, self.next_id = capabilities, answer, [], 1
+
+        def call(self, message):
+            self.calls.append(message["command"])
+            self.next_id += 1
+            if message["command"] == "hello":
+                return {**hello_response(), "capabilities": self.capabilities}
+            if message["command"] == "hierarchy.dump":
+                return {"ok": False, "error": {"code": "unavailable"}}
+            raise ProtocolError("closed", "fake stops after the hierarchy step")
+
+        def hierarchy_dump(self):
+            self.calls.append("hierarchy.dump")
+            if isinstance(self.answer, Exception):
+                raise self.answer
+            return self.answer
+
+    AVAILABLE = [{"name": "serve_protocol", "available": True, "reason": "r"},
+                 {"name": "binder_hierarchy", "available": True, "reason": "r"}]
+
+    def settings_adb(self, values):
+        values = iter(values)
+
+        class Settings:
+            def shell(self, args, **kwargs):
+                return subprocess.CompletedProcess(args, 0, next(values) + "\n", "")
+
+        return Settings()
+
+    def exercise(self, client, dump=None):
+        with self.assertRaises(ProtocolError):
+            exercise_complete(client, SESSION, 34, "x86_64", dump)
+
+    def test_unavailable_hierarchy_must_answer_unavailable_and_never_dumps(self):
+        client = self.Client(hello_response()["capabilities"], b"<x/>")
+        self.exercise(client, dump=lambda c: self.fail("dump ran without binder_hierarchy"))
+        self.assertEqual(client.calls[:2], ["hello", "hierarchy.dump"])
+
+    def test_available_hierarchy_is_dumped_only_when_allowed(self):
+        client = self.Client(self.AVAILABLE, b"<x/>")
+        self.exercise(client)
+        self.assertNotIn("hierarchy.dump", client.calls)
+        taken = []
+        client = self.Client(self.AVAILABLE, b"<x/>")
+        self.exercise(client, dump=lambda c: taken.append(c) or {})
+        self.assertEqual(taken, [client])
+
+    def test_snapshot_keeps_only_the_size_and_requires_the_restore(self):
+        baseline = {"enabled": "0", "services_present": False}
+        dump = hierarchy_snapshot(self.settings_adb(["0"]), baseline)
+        evidence = dump(self.Client(self.AVAILABLE, b"<hierarchy secret/>"))
+        self.assertEqual(evidence, {"hierarchy_frame": "hierarchy", "hierarchy_bytes": 19,
+                                    "accessibility_enabled_restored": True})
+        self.assertNotIn("secret", json.dumps(evidence))
+        with patch("smoke_hierarchy.time.sleep"):
+            dump = hierarchy_snapshot(self.settings_adb(["1"] * 25), baseline)
+            with self.assertRaisesRegex(SessionError, "not restored"):
+                dump(self.Client(self.AVAILABLE, b"<x/>"))
+            # A failed snapshot still checks the restore before propagating.
+            adb = self.settings_adb(["0"])
+            with self.assertRaises(ProtocolError):
+                hierarchy_snapshot(adb, baseline)(
+                    self.Client(self.AVAILABLE, ProtocolError("timeout", "t")))
+            with self.assertRaises(StopIteration):
+                adb.shell([])
+
+    def test_allow_hierarchy_refuses_when_accessibility_is_in_use(self):
+        with patch("smoke_serve.resolve_artifact", return_value=(Path("carlo"), {})):
+            for values in [["0", "svc/.Service"], ["1", "null"]]:
+                with self.assertRaisesRegex(SessionError, "accessibility service"):
+                    run(self.settings_adb(values), Path("manifest.json"), False, True)
 
 
 class CleanupTests(unittest.TestCase):
@@ -386,7 +485,10 @@ class HostBinaryTests(unittest.TestCase):
         # Off the pinned device only the protocol itself is available.
         self.assertEqual(result["capabilities_available"], 1)
         self.assertEqual(result["video_without_channel"], "video_channel_absent")
-        self.assertEqual(result["reserved_unavailable"], 3)
+        self.assertEqual(result["reserved_unavailable"], 2)
+        self.assertEqual(
+            (result["binder_hierarchy_available"], result["hierarchy"]), (False, "unavailable")
+        )
         self.assertEqual(process.wait(10), 0)
         self.assertEqual(process.stderr.read(), b"")
         self.assertFalse(os.path.exists(ready["socket"]))

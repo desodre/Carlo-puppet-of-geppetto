@@ -78,17 +78,18 @@ impl Diagnostics {
             effective_uid,
             selinux_context,
         );
-        // The mirror gate needs the build fingerprint: a property read, no Binder.
+        // Both gates need the build fingerprint: a property read, no Binder.
         let fingerprint = crate::accessibility::fingerprint()?;
         let mirror =
             crate::video::mirror::Profile::detect(&report, fingerprint.as_deref()).is_some();
-        Ok(report.with_display_mirror(mirror))
+        let hierarchy = crate::accessibility::hierarchy::pinned(&report, fingerprint.as_deref());
+        Ok(report.with_profiles(mirror, hierarchy))
     }
 
     /// Recompute the capability list for a process that is (`true`) or is not on
-    /// the one build the display mirror is pinned to.
-    pub(crate) fn with_display_mirror(mut self, pinned_profile: bool) -> Self {
-        self.capabilities = capabilities(pinned_profile);
+    /// the one build the display mirror, and the hierarchy, are pinned to.
+    pub(crate) fn with_profiles(mut self, mirror: bool, hierarchy: bool) -> Self {
+        self.capabilities = capabilities(mirror, hierarchy);
         self
     }
 
@@ -158,7 +159,7 @@ impl Diagnostics {
             selinux_context,
             foundation_ready: is_android && api_ready && abi_ready && identity_ready,
             checks,
-            capabilities: capabilities(false),
+            capabilities: capabilities(false, false),
         }
     }
 
@@ -229,9 +230,9 @@ impl Diagnostics {
 }
 
 /// The capability list. Display capture and the H.264 stream exist only where
-/// the mirror profile gate passes (one exact build); the hierarchy does not exist
-/// anywhere yet. The serve protocol itself runs on every target.
-fn capabilities(pinned_mirror_profile: bool) -> Vec<Capability> {
+/// the mirror profile gate passes, the hierarchy only where its own exact gate
+/// passes (one build each). The serve protocol itself runs on every target.
+fn capabilities(pinned_mirror_profile: bool, pinned_hierarchy_profile: bool) -> Vec<Capability> {
     let mirror = |name, available_reason| Capability {
         name,
         available: pinned_mirror_profile,
@@ -244,8 +245,12 @@ fn capabilities(pinned_mirror_profile: bool) -> Vec<Capability> {
     vec![
         Capability {
             name: "binder_hierarchy",
-            available: false,
-            reason: "not implemented; P1/P4",
+            available: pinned_hierarchy_profile,
+            reason: if pinned_hierarchy_profile {
+                "hierarchy.dump over the control channel on the pinned build; one registration per snapshot"
+            } else {
+                "unavailable on this target: the hierarchy is pinned to one validated build"
+            },
         },
         mirror(
             "display_capture",
@@ -258,7 +263,7 @@ fn capabilities(pinned_mirror_profile: bool) -> Vec<Capability> {
         Capability {
             name: "serve_protocol",
             available: true,
-            reason: "control and video channels bound to one session; hierarchy and stats not implemented",
+            reason: "control and video channels bound to one session; display.info and stats not implemented",
         },
     ]
 }
@@ -372,17 +377,60 @@ mod tests {
                 .map(|capability| capability.name)
                 .collect::<Vec<_>>()
         };
-        let pinned = reference.with_display_mirror(true);
+        let pinned = reference.with_profiles(true, false);
         assert_eq!(
             available(&pinned),
             ["display_capture", "h264_stream", "serve_protocol"]
         );
-        // The hierarchy is never available; the list itself never changes shape.
+        // The list itself never changes shape.
         assert_eq!(names(&pinned), names(&host));
         assert_eq!(names(&host)[0], "binder_hierarchy");
-        let unpinned = pinned.with_display_mirror(false);
+        let unpinned = pinned.with_profiles(false, false);
         assert_eq!(available(&unpinned), ["serve_protocol"]);
         for capability in &unpinned.capabilities {
+            assert!(!capability.reason.is_empty());
+        }
+    }
+
+    #[test]
+    fn hierarchy_is_advertised_only_where_its_exact_gate_passes() {
+        let reference = Diagnostics::from_environment(
+            "android",
+            "x86_64",
+            Some(34),
+            Some("x86_64".into()),
+            Some(2000),
+            Some("u:r:shell:s0".into()),
+        );
+        let host = Diagnostics::from_environment("linux", "x86_64", None, None, Some(1000), None);
+        for report in [&reference, &host] {
+            // Whatever fingerprint is presented, neither target is the pinned build.
+            for fingerprint in [None, Some("any/fingerprint")] {
+                assert!(!crate::accessibility::hierarchy::pinned(
+                    report,
+                    fingerprint
+                ));
+            }
+            assert!(!available(report).contains(&"binder_hierarchy"));
+        }
+        #[cfg(not(target_os = "android"))]
+        assert!(!available(&Diagnostics::collect().unwrap()).contains(&"binder_hierarchy"));
+        let pinned = reference.with_profiles(true, true);
+        assert_eq!(
+            available(&pinned),
+            [
+                "binder_hierarchy",
+                "display_capture",
+                "h264_stream",
+                "serve_protocol",
+            ]
+        );
+        let hierarchy_only = pinned.with_profiles(false, true);
+        assert_eq!(
+            available(&hierarchy_only),
+            ["binder_hierarchy", "serve_protocol"]
+        );
+        for capability in &hierarchy_only.capabilities {
             assert!(!capability.reason.is_empty());
         }
     }

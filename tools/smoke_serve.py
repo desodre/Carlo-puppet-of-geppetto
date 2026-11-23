@@ -5,6 +5,11 @@ Three fresh sessions: a complete one (hello, ping, capabilities, the video
 commands without a video channel, unknown frame kind, shutdown), one with a
 wrong session identifier and one with a bad magic. The video channel itself is
 proven by `smoke_video_stream.py`.
+Where `binder_hierarchy` is not available, `hierarchy.dump` must answer
+`unavailable`. Where it is, one snapshot is taken only with `--allow-hierarchy`:
+the run refuses when an accessibility service is enabled, records only the frame
+kind and byte count (the XML is screen contents and is never kept or printed)
+and checks that `accessibility_enabled` is restored afterwards.
 The agent chooses the transport and says so on its ready line: a socket file,
 exposed with `adb forward tcp:0 localfilesystem:<path>`, or (only when the
 platform denies creating that file) an abstract socket, exposed with
@@ -26,26 +31,56 @@ from serve_session import (
     ExposureError, ServeSession, error_code, first_call, forward_target, parse_forward_port,
     parse_ready, read_line, read_ready, require, sanitise, validate_hello,
 )
+from smoke_hierarchy import accessibility_state, refuse_if_accessibility_in_use, restored
 
 __all__ = [
     "ExposureError", "forward_target", "parse_forward_port", "parse_ready", "read_line",
     "read_ready", "sanitise", "validate_hello",
 ]
 
-RESERVED = ("hierarchy.dump", "display.info", "stats")
+RESERVED = ("display.info", "stats")
+# What `hierarchy.dump` proved in the complete session.
+HIERARCHY_OUTCOMES = ("unavailable", "not_requested", "dumped")
 
 
 def unknown_kind_frame(request_id: int) -> bytes:
     return HEADER.pack(MAGIC, VERSION, 200, 0, request_id, 5) + b"later"
 
 
-def exercise_complete(client, session, api, abi) -> dict:
-    """hello, ping, capabilities, video commands with no video channel, recovery, shutdown."""
+def hierarchy_snapshot(adb: Adb, baseline: dict):
+    """One `hierarchy.dump` that keeps only the frame kind and byte count."""
+
+    def dump(client) -> dict:
+        try:
+            size = len(client.hierarchy_dump())
+        finally:
+            back = restored(adb, baseline)
+        require(back, "accessibility_enabled was not restored after hierarchy.dump")
+        require(size > 0, "hierarchy.dump answered an empty document")
+        return {"hierarchy_frame": "hierarchy", "hierarchy_bytes": size,
+                "accessibility_enabled_restored": True}
+
+    return dump
+
+
+def exercise_complete(client, session, api, abi, dump=None) -> dict:
+    """hello, ping, capabilities, hierarchy.dump, video commands with no video channel,
+    recovery, shutdown. `dump` takes the snapshot when the owner allowed it."""
     hello = first_call(client, {"command": "hello", "protocol": VERSION, "session": session})
     count = validate_hello(hello, api, abi)
     available = {entry["name"] for entry in hello["capabilities"] if entry["available"]}
     require("serve_protocol" in available, "serve_protocol is not reported available")
-    require("binder_hierarchy" not in available, "hierarchy is reported available")
+    hierarchy_available = "binder_hierarchy" in available
+    if not hierarchy_available:
+        require(
+            error_code(client.call({"command": "hierarchy.dump"})) == "unavailable",
+            "hierarchy.dump was not refused as unavailable without binder_hierarchy",
+        )
+        hierarchy = {"hierarchy": "unavailable"}
+    elif dump is None:
+        hierarchy = {"hierarchy": "not_requested"}
+    else:
+        hierarchy = {"hierarchy": "dumped", **dump(client)}
     require(client.call({"command": "ping"}) == {"ok": True}, "ping failed")
     # No video connection is opened in this session: the channel stays pending
     # (until its deadline) and the video commands answer without one.
@@ -93,6 +128,8 @@ def exercise_complete(client, session, api, abi) -> dict:
         "capabilities": count,
         "capabilities_available": len(available),
         "serve_protocol_available": True,
+        "binder_hierarchy_available": hierarchy_available,
+        **hierarchy,
         "video_without_channel": "video_channel_absent",
         "reserved_unavailable": unavailable,
         "unknown_kind_recovered": True,
@@ -134,7 +171,7 @@ CASES = {
 }
 
 
-def serve_case(adb: Adb, binary: Path, device: dict, name: str) -> dict:
+def serve_case(adb: Adb, binary: Path, device: dict, name: str, dump=None) -> dict:
     """Run one case in a fresh private session; always remove the forward and directory."""
     exercise, clean_exit = CASES[name]
     session = ServeSession(adb, binary)
@@ -143,7 +180,8 @@ def serve_case(adb: Adb, binary: Path, device: dict, name: str) -> dict:
         ready = session.start()
         result.update(session.evidence)
         client = session.track(ControlClient(session.connect()))
-        result.update(exercise(client, ready["session"], device["android_api"], device["abi"]))
+        result.update(
+            exercise(client, ready["session"], device["android_api"], device["abi"], dump))
         result["exit_code"], stderr = session.finish()
         result["stderr_bytes"] = len(stderr)
         require(
@@ -200,6 +238,26 @@ def validate_summary(summary: dict) -> dict:
         and complete.get("unknown_kind_recovered") is True,
         "complete session lacks handshake or recovery evidence",
     )
+    hierarchy = complete.get("hierarchy")
+    available = complete.get("binder_hierarchy_available")
+    require(
+        isinstance(available, bool) and hierarchy in HIERARCHY_OUTCOMES
+        and (hierarchy == "unavailable") is (not available),
+        "hierarchy.dump outcome disagrees with the binder_hierarchy capability",
+    )
+    if hierarchy == "dumped":
+        size = complete.get("hierarchy_bytes")
+        require(
+            complete.get("hierarchy_frame") == "hierarchy"
+            and isinstance(size, int) and not isinstance(size, bool) and size > 0
+            and complete.get("accessibility_enabled_restored") is True,
+            "hierarchy snapshot lacks frame, size or restore evidence",
+        )
+    else:
+        require(
+            not {"hierarchy_frame", "hierarchy_bytes"} & set(complete),
+            "hierarchy evidence recorded without a snapshot",
+        )
     require(
         cases["wrong_session"].get("rejected") == "invalid_session"
         and cases["bad_magic"].get("rejected") == "bad_magic",
@@ -210,9 +268,15 @@ def validate_summary(summary: dict) -> dict:
     return summary
 
 
-def run(adb: Adb, manifest: Path, allow_physical: bool) -> tuple[dict, SessionError | None]:
+def run(adb: Adb, manifest: Path, allow_physical: bool,
+        allow_hierarchy: bool = False) -> tuple[dict, SessionError | None]:
     """Run every case; an exposure failure is recorded and returned, never worked around."""
     binary, device = resolve_artifact(adb, manifest, allow_physical)
+    dump = None
+    if allow_hierarchy:
+        baseline = accessibility_state(adb)
+        refuse_if_accessibility_in_use(baseline)
+        dump = hierarchy_snapshot(adb, baseline)
     summary = {
         "emulator": device["emulator"],
         "android_api": device["android_api"],
@@ -223,7 +287,7 @@ def run(adb: Adb, manifest: Path, allow_physical: bool) -> tuple[dict, SessionEr
     }
     try:
         for name in CASES:
-            result = serve_case(adb, binary, device, name)
+            result = serve_case(adb, binary, device, name, dump if name == "complete" else None)
             summary["cases"].append(result)
             if summary["transport"] is None:
                 summary["transport"] = result["transport"]
@@ -244,9 +308,13 @@ def main():
     parser.add_argument("--output", type=Path, default=ROOT / "results/serve")
     parser.add_argument("--allow-physical", action="store_true",
                         help="the owner authorized this physical device for this run")
+    parser.add_argument("--allow-hierarchy", action="store_true",
+                        help="take one hierarchy.dump snapshot where binder_hierarchy is "
+                             "available (refused while an accessibility service is enabled)")
     args = parser.parse_args()
     manifest = args.manifest.resolve()
-    summary, failure = run(Adb(args.serial), manifest, args.allow_physical)
+    summary, failure = run(Adb(args.serial), manifest, args.allow_physical,
+                           args.allow_hierarchy)
     summary["agent_manifest"] = json.loads(manifest.read_text())
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")

@@ -218,6 +218,44 @@ class ControlClient:
             raise ProtocolError("invalid_response", "response does not echo the request ID")
         return response[1]
 
+    def hierarchy_dump(self) -> bytes:
+        """One complete hierarchy snapshot as the raw UTF-8 XML bytes of a hierarchy frame.
+
+        A control-frame answer is a failure and raises ProtocolError with the
+        agent's stable code (`unavailable`, `conflict`, `timeout`, ...), marked
+        recoverable because the connection stays usable. The document is screen
+        contents: it is returned, never logged or put into an error.
+        """
+        request_id, self.next_id = self.next_id, self.next_id + 1
+        self.send(encode(CONTROL, request_id, json.dumps({"command": "hierarchy.dump"}).encode()))
+        try:
+            frame = read_frame(self.reader)
+        except ConnectionResetError:
+            frame = None
+        if frame is None:
+            raise ProtocolError("closed", "agent closed the connection before responding")
+        if frame.request_id != request_id:
+            raise ProtocolError("invalid_response", "response does not echo the request ID")
+        if frame.kind == HIERARCHY:
+            try:
+                frame.payload.decode("utf-8")
+            except UnicodeDecodeError:
+                raise ProtocolError("invalid_response", "hierarchy payload is not UTF-8") from None
+            return frame.payload
+        if frame.kind != CONTROL:
+            raise ProtocolError("unexpected_kind", f"kind {frame.kind} on the control channel")
+        try:
+            message = json.loads(frame.payload)
+        except ValueError:
+            raise ProtocolError("invalid_response", "control payload is not JSON") from None
+        if not isinstance(message, dict) or message.get("ok") is not False:
+            raise ProtocolError("invalid_response", "answer is neither XML nor an error")
+        error = message.get("error")
+        code = error.get("code") if isinstance(error, dict) else None
+        if not isinstance(code, str):
+            raise ProtocolError("invalid_response", "answer is neither XML nor an error")
+        raise ProtocolError(code, "hierarchy.dump failed", recoverable=True, request_id=request_id)
+
     def close(self) -> None:
         self.reader.close()
         self.connection.close()

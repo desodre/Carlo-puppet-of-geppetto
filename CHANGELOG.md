@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- Serve `hierarchy.dump` over the control channel of `carlo serve` (refs #5).
+  **Host-tested only: `hierarchy.dump` over serve was not executed on any
+  device.** On success the answer is a hierarchy frame (kind 2) carrying the raw
+  UTF-8 XML of `docs/hierarchy.md` with the request ID echoed, never Base64 and
+  never logged; on failure a control error with a stable code (`unavailable`,
+  `conflict`, `windows_unavailable`, `inconsistent_snapshot`, `truncated`,
+  `unsupported_node`, `timeout`, `internal`). The command left the reserved
+  list; `display.info` and `stats` still answer `unavailable`.
+  - Gated by the exact hierarchy profile (`samsung_a16x_api36`); elsewhere,
+    the host and the API 34 reference included, it answers `unavailable`
+    without loading a library or making a Binder call.
+  - Each snapshot registers, reads and unregisters its own automation session;
+    no registration is held between requests. Snapshot ids and the generation
+    continue across one serve session. The hierarchy source is released in the
+    session teardown on every exit path.
+  - `binder_hierarchy` is now computed from that same gate: `true` only on the
+    pinned API 36 build, `false` on the host and the API 34 reference.
+  - `ControlClient.hierarchy_dump()` in `tools/carlo_protocol.py` returns the
+    XML bytes or raises `ProtocolError` with the agent's code.
 - Add a complete accessibility hierarchy snapshot on a second pinned profile
   (#36, #37, #38, #39, #40, #41, #42, #43; refs #5). **Host-tested only: nothing
   in this entry was executed on a device.** `hierarchy-probe` reports counters,

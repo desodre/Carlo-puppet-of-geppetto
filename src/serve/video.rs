@@ -959,7 +959,12 @@ mod tests {
                 let diagnostics =
                     Diagnostics::from_environment("linux", "x86_64", None, None, None, None);
                 let video = Video::new(source, timings);
-                let mut control = Control::new(SESSION.into(), &diagnostics, video);
+                let mut control = Control::new(
+                    SESSION.into(),
+                    &diagnostics,
+                    video,
+                    Box::new(crate::serve::hierarchy::fake::Fake::default()),
+                );
                 let mut stream = BoundedStream::new(server, &stop).unwrap();
                 let long = Duration::from_secs(30);
                 let result = converse(&mut stream, &mut control, long, long, Some(listener));

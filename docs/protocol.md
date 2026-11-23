@@ -1,11 +1,15 @@
-# Protocol v1 — framing (#33 / #34), control transport and handshake (#31 / #32), video channel and stream (#30 / #35 / #44 / #46 / #51)
+# Protocol v1 — framing (#33 / #34), control transport and handshake (#31 / #32), video channel and stream (#30 / #35 / #44 / #46 / #51), hierarchy dump
 
 Status: framing, a control channel with its handshake, and a video channel bound
 to the same session. `carlo serve` serves one client over two connections of the
 same Unix socket, both exposed through one `adb forward`: control (`hello`,
-`ping`, `capabilities`, `channels`, `video.start`, `video.stop`, `shutdown`) and
-video (agent-to-client packets). There is no HTTP and no WebSocket, no
-reconnection and no second client. Hierarchy and `stats` answer `unavailable`.
+`ping`, `capabilities`, `channels`, `hierarchy.dump`, `video.start`,
+`video.stop`, `shutdown`) and video (agent-to-client packets). There is no HTTP
+and no WebSocket, no reconnection and no second client. `display.info` and
+`stats` answer `unavailable`. [`hierarchy.dump`](#hierarchy-dump) answers a
+document only where the exact hierarchy profile gate passes (Samsung a16x,
+API 36, arm64, shell) and `unavailable` everywhere else; **over serve it is
+host-tested only and was not executed on any device**.
 The stream exists only where the display-mirror profile gate passes (one pinned
 build: Samsung a16x, API 36, arm64, shell); on every other target `video.start`
 answers `unavailable`. Not implemented: displays other than the main one,
@@ -179,7 +183,9 @@ time. Success:
 `doctor` reports (name, available, reason): `serve_protocol` is `true`;
 `display_capture` and `h264_stream` are `true` only on the pinned mirror build
 and `false` with a reason everywhere else, the host and the API 34 reference
-included; `binder_hierarchy` is `false`.
+included; `binder_hierarchy` is `true` only where the exact hierarchy profile
+gate passes and `false` with a reason everywhere else, the host and the API 34
+reference included.
 
 | Request | State | Response | Connection |
 |---|---|---|---|
@@ -193,7 +199,8 @@ included; `binder_hierarchy` is `false`.
 | `shutdown` | after | `{"ok":true}` | **close** (stream stopped, video channel closed), exit 0 |
 | `channels` | after | `{"ok":true,"video":"pending"\|"attached"\|"absent"\|"closed"}` | continues |
 | `video.start`, `video.stop` | after | see [Stream control](#stream-control) | continues |
-| `hierarchy.dump`, `display.info`, `stats` | after | `unavailable` | continues |
+| `hierarchy.dump` | after | hierarchy frame with the XML, or a control error; see [Hierarchy dump](#hierarchy-dump) | continues |
+| `display.info`, `stats` | after | `unavailable` | continues |
 | any other command name | after | `unknown_command` | continues |
 | not UTF-8 JSON, not an object, `command` missing or not a string | any | `invalid_request` | continues |
 | hierarchy or video frame | any | `unexpected_kind` | continues |
@@ -373,7 +380,66 @@ response or a packet. The listener's exposure after `hello` is bounded by the
 10 s window and three attempts. The agent never reads commands from the video
 channel. Responses and stop reports contain counters and constants only.
 
+## Hierarchy dump
+
+`{"command":"hierarchy.dump"}` after the handshake takes one complete snapshot
+(the contract, limits and XML are `docs/hierarchy.md`). Any other request field
+is ignored.
+
+- **Success:** one **hierarchy frame** (kind 2) whose request ID is the
+  request's and whose payload is the raw UTF-8 XML document: never Base64, never
+  wrapped in JSON, at most the 8 MiB frame limit (the snapshot itself stops at
+  4 MiB). The document is real screen contents: the agent never logs it or puts
+  it into an error, and clients must treat it the same way.
+- **Failure:** one control frame `{"ok":false,"error":{"code":"..."}}` with
+  only the code; no operation name, status or UI content reaches the client.
+
+| Code | Cause |
+|---|---|
+| `unavailable` | not the pinned hierarchy profile (host, API 34 reference, any other build): no library is loaded and no Binder call is made |
+| `conflict` | another automation session is registered |
+| `windows_unavailable` | the window list answered null |
+| `inconsistent_snapshot` | the tree changed during every bounded attempt |
+| `truncated` | a node, depth, XML or deadline limit was reached, or the document exceeds the frame limit; no partial XML is sent |
+| `unsupported_node` | a node used an encoding that is not pinned |
+| `timeout` | registration or a node request timed out |
+| `internal` | any other session, Binder or decoding failure |
+
+Each snapshot registers its own UiAutomation session (flags exactly 1),
+reads, and unregisters on every exit path before the answer is sent: no
+registration is held between requests or after the session. Snapshot ids and
+the geometry generation continue across one serve session. The control loop
+waits for the snapshot; other control requests and the reaction to a signal are
+delayed by up to its worst case: about 5 s for registration, plus the 10 s
+snapshot deadline, plus one in-flight `getWindows` Binder call, which is
+synchronous and cannot be cancelled (it is not bounded by the agent). While a
+snapshot runs, SIGHUP, SIGINT and SIGTERM (the same set serve handles, so
+killing the host `adb shell` is covered) are routed to the snapshot's own
+handlers: one that arrives cancels the snapshot at its next check, the
+registration is still released, and the serve session then ends as interrupted
+(exit 74). The connection continues after either answer.
+
+The host client is `ControlClient.hierarchy_dump()` in
+`tools/carlo_protocol.py`: it returns the XML bytes and raises `ProtocolError`
+with the agent's code (recoverable) on a control answer.
+
 ## Validation
+
+**`hierarchy.dump` over serve is host-tested only.** On the host the real agent
+is not the pinned build: `hierarchy.dump` answers `unavailable` and
+`binder_hierarchy` is `false`. The success path, the hierarchy frame, the
+request-ID echo, every error mapping, the frame-limit and UTF-8 refusals, and
+the release of the source on shutdown, framing failure and signal are proven
+through the production control loop with a fake source injected behind the
+same trait the device source implements (test-only code); the device source,
+on the pinned build, reuses the snapshot path of `hierarchy-dump`. Not executed:
+`hierarchy.dump` over serve on any device, repeated snapshots in one serve
+process, a snapshot concurrent with a running stream. `tools/smoke_serve.py`
+requires `hierarchy.dump` to answer `unavailable` wherever `binder_hierarchy`
+is not available; where it is, it takes one snapshot only with
+`--allow-hierarchy`, refuses when an accessibility service is enabled, records
+only the frame kind and byte count, and checks that `accessibility_enabled` is
+restored.
 
 Host (Linux x86_64) and one authorized physical device (Samsung API 36 arm64,
 shell, SELinux enforcing). Device evidence for the control channel is in
@@ -427,7 +493,7 @@ Executed on the host on 2026-11-21:
     the frame count or the capture deadline as before, the pinned create
     request is unchanged, failures map to stable codes, and the profile gate
     refuses every other target. Capabilities: host and API 34 reference report
-    only `serve_protocol`; `binder_hierarchy` is never available.
+    only `serve_protocol`.
   - `tests/serve.rs` runs the real binary with a 0700 temp directory and a std
     client: the earlier control cases (full session, one-byte fragmentation,
     handshake rejections, framing rejections, unknown-kind recovery, EOF in
