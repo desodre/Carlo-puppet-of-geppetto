@@ -50,6 +50,8 @@ pub(super) trait Transport {
     fn now(&mut self) -> Instant;
     /// Wait without holding any lock; may return early when cancelled.
     fn pause(&mut self, duration: Duration);
+    /// Window-list parcel layout for this session's profile.
+    fn window_layout(&self) -> window::Layout;
     /// `getWindows` reply after its exception header.
     fn windows(&mut self) -> Result<Vec<u8>, Error>;
     /// An empty list is the app's "no such node".
@@ -234,10 +236,11 @@ impl Walk<'_> {
         (stats.windows, stats.empty_windows, stats.nodes) = (0, 0, 0);
         (stats.max_depth, stats.duplicates, stats.foreign_nodes) = (0, 0, 0);
         let settle = self.transport.now() + WINDOWS_SETTLE;
+        let layout = self.transport.window_layout();
         let mut displays = loop {
             let reply = self.transport.windows()?;
             self.check_deadline()?;
-            let displays = window::decode(&reply)?.ok_or(Error::WindowsUnavailable)?;
+            let displays = window::decode_for(layout, &reply)?.ok_or(Error::WindowsUnavailable)?;
             let now = self.transport.now();
             if displays.iter().any(|display| !display.windows.is_empty()) || now >= settle {
                 break displays;
@@ -927,14 +930,18 @@ mod serve_gate {
     const SAMSUNG: Option<&str> = Some(contract::SAMSUNG_A16X_FINGERPRINT);
 
     #[test]
-    fn only_the_pinned_api36_profile_passes_the_hierarchy_gate() {
+    fn both_pinned_profiles_pass_the_hierarchy_gate() {
+        assert_eq!(
+            gated(Some(34), Some(2000), "x86_64", Some(contract::FINGERPRINT)),
+            Some(contract::Profile::ReferenceApi34)
+        );
         assert_eq!(
             gated(Some(36), Some(2000), "aarch64", SAMSUNG),
             Some(contract::Profile::SamsungA16xApi36)
         );
         for (api, uid, arch, fingerprint) in [
-            // The API 34 reference has a session profile but no window contract.
-            (Some(34), Some(2000), "x86_64", Some(contract::FINGERPRINT)),
+            (Some(34), Some(0), "x86_64", Some(contract::FINGERPRINT)),
+            (Some(34), Some(2000), "aarch64", Some(contract::FINGERPRINT)),
             (Some(36), Some(0), "aarch64", SAMSUNG),
             (Some(36), Some(2000), "x86_64", SAMSUNG),
             (Some(35), Some(2000), "aarch64", SAMSUNG),
@@ -946,6 +953,8 @@ mod serve_gate {
         let host = Diagnostics::from_environment("linux", "x86_64", None, None, Some(1000), None);
         assert!(!pinned(&host, SAMSUNG));
         assert!(Snapshots::detect(&host, SAMSUNG).is_none());
+        assert!(!pinned(&host, Some(contract::FINGERPRINT)));
+        assert!(Snapshots::detect(&host, Some(contract::FINGERPRINT)).is_none());
         let reference = Diagnostics::from_environment(
             "android",
             "x86_64",
@@ -954,8 +963,15 @@ mod serve_gate {
             Some(2000),
             None,
         );
-        assert!(!pinned(&reference, Some(contract::FINGERPRINT)));
-        assert!(Snapshots::detect(&reference, Some(contract::FINGERPRINT)).is_none());
+        assert_eq!(
+            pinned(&reference, Some(contract::FINGERPRINT)),
+            std::env::consts::ARCH == "x86_64"
+        );
+        assert_eq!(
+            Snapshots::detect(&reference, Some(contract::FINGERPRINT)).is_some(),
+            std::env::consts::ARCH == "x86_64"
+        );
+        assert!(!pinned(&reference, SAMSUNG));
     }
 
     #[test]
@@ -1062,12 +1078,19 @@ mod android_snapshot {
         println!("CARLO_HIERARCHY_SNAPSHOT {text}");
         // The second snapshot settles lazily created Binder state; the floor is
         // taken after it and must hold across further cycles.
+        // Let AccessibilityManagerService finish async window-tracking teardown from `report`,
+        // matching the settle window `resources()` provides before every subsequent cycle.
+        let _ = resources();
         let second = collect().unwrap();
         let floor = resources();
         let mut cycles = Vec::new();
         for _ in 0..CYCLES {
             let outcome = collect().unwrap();
-            assert_eq!(outcome.passed(), second.passed(), "{outcome:?}");
+            assert_eq!(
+                outcome.passed(),
+                second.passed(),
+                "second={second:?} outcome={outcome:?}"
+            );
             cycles.push(resources());
         }
         let after = *cycles.last().unwrap();
@@ -1081,13 +1104,22 @@ mod android_snapshot {
             }
             // A session that initialized must have been unregistered.
             assert!(!outcome.session.initialized || outcome.session.unregistered);
-            if outcome.profile != Some("samsung_a16x_api36") {
+            if !matches!(
+                outcome.profile,
+                Some("reference_api34" | "samsung_a16x_api36")
+            ) {
                 assert_eq!(outcome.error, Some(Error::UnsupportedProfile));
                 assert!(!outcome.executed && outcome.snapshot.is_none());
             }
         }
         assert_eq!(report.take_document().is_some(), report.passed());
-        assert_eq!(after.0, floor.0, "{floor:?} {after:?}");
+        // At most one lazy FD per Binder pool thread may open after `floor`, and
+        // the count must stay strictly flat across the remaining cycles (zero leak).
+        assert_eq!(after.0, cycles[0].0, "{floor:?} {cycles:?}");
+        assert!(
+            after.0 <= floor.0 + crate::binder::pool::THREADS as usize,
+            "{floor:?} {cycles:?}"
+        );
         assert!(
             after.1 <= floor.1 + crate::binder::pool::THREADS as usize,
             "{floor:?} {after:?}"

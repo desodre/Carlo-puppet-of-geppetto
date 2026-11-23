@@ -6,6 +6,24 @@
 
 use super::{Error, contract, node::Bounds};
 
+/// Window parcel layout for a pinned profile.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Layout {
+    /// AOSP API 34: ends immediately after `mLocales` (14 fields).
+    AospApi34,
+    /// Samsung API 36: appends trailing `mRawType` i32 (15 fields).
+    SamsungApi36,
+}
+
+impl Layout {
+    pub(super) fn from_profile(profile: contract::Profile) -> Self {
+        match profile {
+            contract::Profile::ReferenceApi34 => Self::AospApi34,
+            contract::Profile::SamsungA16xApi36 => Self::SamsungApi36,
+        }
+    }
+}
+
 const WINDOW_CLASS: &str = "android.view.accessibility.AccessibilityWindowInfo";
 const LOCALES_CLASS: &str = "android.os.LocaleList";
 const MAX_CLASS_UNITS: usize = 128;
@@ -130,7 +148,7 @@ impl<'a> Reader<'a> {
             Err(bad(field, "unexpected_class"))
         }
     }
-    fn window(&mut self) -> Result<Window, Error> {
+    fn window(&mut self, layout: Layout) -> Result<Window, Error> {
         let display_id = self.int("display_id")?;
         let kind = self.int("type")?;
         if kind != -1 && !(1..=7).contains(&kind) {
@@ -171,20 +189,12 @@ impl<'a> Reader<'a> {
             });
         }
         // Title: TextUtils CharSequence. Validated, then dropped: it is UI content.
-        match self.int("title")? {
-            1 => {
-                if let Some(bytes) = self.units("title", 1, MAX_TITLE_BYTES)? {
-                    std::str::from_utf8(bytes).map_err(|_| bad("title", "utf8"))?;
-                }
-            }
-            0 => {
-                let text = self.units("title", 1, MAX_TITLE_BYTES)?;
-                if text.is_some() && self.int("title")? != 0 {
-                    return Err(bad("title", "char_sequence_span"));
-                }
-            }
-            _ => return Err(bad("title", "char_sequence_kind")),
-        }
+        super::node::skip_window_title(
+            self.data,
+            &mut self.position,
+            MAX_TITLE_BYTES,
+            layout == Layout::SamsungApi36,
+        )?;
         self.long("anchor_id")?;
         self.long("transition_time")?;
         let children = self.count("child_ids", MAX_CHILD_WINDOWS)?;
@@ -197,7 +207,9 @@ impl<'a> Reader<'a> {
         {
             return Err(bad("locales", "missing_tags"));
         }
-        self.int("raw_type")?; // Samsung-only trailing mRawType
+        if layout == Layout::SamsungApi36 {
+            self.int("raw_type")?; // Samsung-only trailing mRawType
+        }
         Ok(Window {
             display_id,
             kind,
@@ -208,9 +220,9 @@ impl<'a> Reader<'a> {
     }
 }
 
-/// Decode the reply after its exception header. `Ok(None)` is the null answer
-/// the system gives a session without the window capability or flag.
-pub(super) fn decode(data: &[u8]) -> Result<Option<Vec<Display>>, Error> {
+/// Decode the reply after its exception header for *layout*. `Ok(None)` is the
+/// null answer the system gives a session without the window capability or flag.
+pub(super) fn decode_for(layout: Layout, data: &[u8]) -> Result<Option<Vec<Display>>, Error> {
     if data.len() > contract::MAX_CALLBACK_BYTES as usize || !data.len().is_multiple_of(4) {
         return Err(bad("reply", "parcel_size"));
     }
@@ -225,7 +237,7 @@ pub(super) fn decode(data: &[u8]) -> Result<Option<Vec<Display>>, Error> {
                 let mut list = Vec::with_capacity(windows);
                 for _ in 0..windows {
                     reader.class("class_name", WINDOW_CLASS, false)?;
-                    list.push(reader.window()?);
+                    list.push(reader.window(layout)?);
                 }
                 let id = reader.int("list_display_id")?;
                 if list.iter().any(|window: &Window| window.display_id != id) {
@@ -244,6 +256,15 @@ pub(super) fn decode(data: &[u8]) -> Result<Option<Vec<Display>>, Error> {
         return Err(bad("reply", "trailing_data"));
     }
     Ok(displays)
+}
+
+/// Decode the reply after its exception header using the Samsung API 36 layout.
+#[cfg_attr(
+    not(test),
+    allow(dead_code, reason = "API 36 alias exercised by host tests")
+)]
+pub(super) fn decode(data: &[u8]) -> Result<Option<Vec<Display>>, Error> {
+    decode_for(Layout::SamsungApi36, data)
 }
 
 /// Synthetic reply builders shared with the traversal tests.
@@ -277,6 +298,7 @@ pub(super) mod fixture {
         data
     }
     /// A window as the pinned build writes it.
+    #[derive(Clone)]
     pub(crate) struct Spec {
         pub(crate) display: i32,
         pub(crate) kind: i32,
@@ -299,6 +321,9 @@ pub(super) mod fixture {
             }
         }
         pub(crate) fn body(&self) -> Vec<u8> {
+            self.body_for(super::Layout::SamsungApi36)
+        }
+        pub(crate) fn body_for(&self, layout: super::Layout) -> Vec<u8> {
             let mut data = [
                 int(self.display),
                 int(self.kind),
@@ -331,12 +356,14 @@ pub(super) mod fixture {
                 }
                 None => data.extend(string16(None)),
             }
-            data.extend(int(self.kind)); // mRawType
+            if layout == super::Layout::SamsungApi36 {
+                data.extend(int(self.kind)); // mRawType
+            }
             data
         }
     }
-    /// Reply bytes for `(display id, windows)` lists.
-    pub(crate) fn reply(displays: &[(i32, Vec<Spec>)]) -> Vec<u8> {
+    /// Reply bytes for `(display id, windows)` lists under *layout*.
+    pub(crate) fn reply_for(layout: super::Layout, displays: &[(i32, Vec<Spec>)]) -> Vec<u8> {
         let mut data = [int(1), int(displays.len() as i32)].concat();
         for (id, windows) in displays {
             data.extend(int(windows.len() as i32));
@@ -344,11 +371,15 @@ pub(super) mod fixture {
                 data.extend(string16(Some(
                     "android.view.accessibility.AccessibilityWindowInfo",
                 )));
-                data.extend(window.body());
+                data.extend(window.body_for(layout));
             }
             data.extend(int(*id));
         }
         data
+    }
+    /// Reply bytes for `(display id, windows)` lists under the API 36 layout.
+    pub(crate) fn reply(displays: &[(i32, Vec<Spec>)]) -> Vec<u8> {
+        reply_for(super::Layout::SamsungApi36, displays)
     }
 }
 
@@ -530,9 +561,22 @@ mod tests {
         assert!(decode(&build(plain.clone(), string16(None))).is_ok());
         let unspanned = [int(0), string8("t"), int(0)].concat();
         assert!(decode(&build(unspanned, string16(None))).is_ok());
-        let spanned = [int(0), string8("t"), int(7)].concat();
+        let supported_span = [
+            int(0),
+            string8("styled"),
+            int(7),
+            int(1),
+            int(0),
+            int(0),
+            int(6),
+            int(33),
+            int(0),
+        ]
+        .concat();
+        assert!(decode(&build(supported_span, string16(None))).is_ok());
+        let unpinned_span = [int(0), string8("t"), int(22)].concat();
         assert_eq!(
-            field(decode(&build(spanned, string16(None)))),
+            field(decode(&build(unpinned_span, string16(None)))),
             ("title", "char_sequence_span")
         );
         let invalid = [int(1), int(1), vec![0xff, 0, 0, 0]].concat();
@@ -578,5 +622,34 @@ mod tests {
                 let _ = decode(&mutated);
             }
         }
+    }
+
+    #[test]
+    fn aosp_api34_layout_decodes_without_raw_type_and_rejects_mismatched_layouts() {
+        let mut w1 = Spec::new(0, 11, 5);
+        w1.kind = -1;
+        w1.locales = Some("en-US");
+        let mut w2 = Spec::new(2, 40, 1);
+        w2.kind = 3;
+        let data34 = reply_for(Layout::AospApi34, &[(0, vec![w1.clone()]), (2, vec![w2])]);
+        let displays = decode_for(Layout::AospApi34, &data34).unwrap().unwrap();
+        assert_eq!(displays.len(), 2);
+        assert_eq!(displays[0].windows[0].kind, -1);
+        assert_eq!(displays[1].windows[0].id, 40);
+
+        // API 36 reply contains an extra mRawType int -> trailing data on API 34
+        // when mRawType happens to match display_id, or list_display_id mismatch otherwise.
+        let one36_trailing = reply_for(Layout::SamsungApi36, &[(1, vec![Spec::new(1, 11, 5)])]);
+        assert_eq!(
+            field(decode_for(Layout::AospApi34, &one36_trailing)),
+            ("reply", "trailing_data")
+        );
+
+        // API 34 reply lacks mRawType -> Samsung decoder consumes list_display_id and runs short.
+        let one34 = reply_for(Layout::AospApi34, &[(0, vec![w1])]);
+        assert_eq!(
+            field(decode_for(Layout::SamsungApi36, &one34)),
+            ("list_display_id", "truncated")
+        );
     }
 }

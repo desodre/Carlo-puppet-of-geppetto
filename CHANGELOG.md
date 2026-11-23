@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- Pin the AOSP API 34 `x86_64` emulator hierarchy profile (`reference_api34`)
+  for `hierarchy-probe`, `hierarchy-dump`, `hierarchy-tests`, and `carlo serve`
+  `hierarchy.dump`. Contracts verified against the API 34 system image's
+  `framework.jar` and `services.jar` (`docs/compat/api34-accessibility.json`):
+  - `SERVICE_INFO_API34_HIERARCHY` adds `RETRIEVE_INTERACTIVE_WINDOWS` (22 fields).
+  - `window::Layout::AospApi34` decodes 14-field `AccessibilityWindowInfo` without
+    Samsung's trailing `mRawType`.
+  - `node::decode34` decodes the 45-bit API 34 `AccessibilityNodeInfo` layout
+    (without `mHasIntent`, 4-field `CollectionInfo`, 8-field `CollectionItemInfo`,
+    and pinned bit-40 `TouchDelegateInfo`).
+  - `node::text_hierarchy` and `window::skip_window_title` consume pinned
+    `TextUtils` span kinds `1..=29` (except `22` `EasyEditSpan` / unpinned `30+`,
+    with API 34 vs API 36 layouts for `SuggestionSpan` and `TtsSpan`
+    `PersistableBundle`), keeping `P1` `node::decode` span-strict.
+  - Validated end-to-end on the API 34 `x86_64` emulator (`carlo_api34`: `doctor`,
+    `hierarchy-probe` on Home and Settings, serialized native `android_snapshot`
+    plus 8-cycle resource check, `tools/smoke_serve.py --allow-hierarchy`, and
+    all 19 tests of Geppetto's `integration/` suite under `--geppetto-backend=carlo`),
+    and regression-checked on API 36 hardware (`SM-A166M`) with `smoke_serve.py`.
 - Serve `hierarchy.dump` over the control channel of `carlo serve` (refs #5).
   **Host-tested only: `hierarchy.dump` over serve was not executed on any
   device.** On success the answer is a hierarchy frame (kind 2) carrying the raw

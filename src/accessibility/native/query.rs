@@ -11,10 +11,10 @@ use crate::accessibility::query::{Awaiting, Envelope, Reply};
 /// Which answers a request accepts; fixed when its callback object is created.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum Kind {
-    /// API 34: one code-1 envelope, at most 64 KiB.
+    /// P1 single-node proof: one code-1 envelope, at most 64 KiB.
     Single,
-    /// API 36: a code-1 node or a code-2 list, at most `MAX_BATCH_BYTES`.
-    Batch,
+    /// Hierarchy snapshot: a code-1 node or a code-2 list decoded for [`Profile`].
+    Batch(Profile),
 }
 
 struct Query {
@@ -69,12 +69,12 @@ fn dispatch(binder: *mut Binder, code: u32, parcel: *const Parcel) -> i32 {
         (Kind::Single, contract::NODE_RESULT) => {
             read_envelope(api, parcel).map(|envelope| Reply::Single(Box::new(envelope)))
         }
-        (Kind::Batch, contract::NODE_RESULT | contract::NODE_RESULTS) => {
-            read_batch(api, code, parcel).map(Reply::Batch)
+        (Kind::Batch(profile), contract::NODE_RESULT | contract::NODE_RESULTS) => {
+            read_batch(api, profile, code, parcel).map(Reply::Batch)
         }
         // Prefetch continuation: never requested (every batch request is
         // uninterruptible), accepted and dropped without reading it.
-        (Kind::Batch, contract::PREFETCH_RESULT) => return 0,
+        (Kind::Batch(_), contract::PREFETCH_RESULT) => return 0,
         _ => return -74,
     };
     let invalid = result.is_err();
@@ -146,6 +146,7 @@ pub(super) fn copy_rest(
 
 fn read_batch(
     api: &'static Api,
+    profile: Profile,
     code: u32,
     parcel: NonNull<Parcel>,
 ) -> Result<crate::accessibility::node::Batch, Error> {
@@ -155,7 +156,7 @@ fn read_batch(
             reason: "binder_or_fd_objects",
         })
     })?;
-    crate::accessibility::node::decode36(code, &bytes)
+    crate::accessibility::node::decode_batch(profile, code, &bytes)
 }
 
 impl Session {
@@ -216,9 +217,9 @@ impl Session {
         }
     }
 
-    /// API 36: the nodes of one answer, in wire order. An empty list is "no such
-    /// node"; the invalid-window sentinel is [`Error::WindowGone`]. `stop` is the
-    /// owner's cancellation flag ([`STOP`] for one-shot commands).
+    /// Hierarchy snapshot: the nodes of one answer, in wire order. An empty list
+    /// is "no such node"; the invalid-window sentinel is [`Error::WindowGone`].
+    /// `stop` is the owner's cancellation flag ([`STOP`] for one-shot commands).
     pub(super) fn query_batch(
         &mut self,
         window: i32,
@@ -228,7 +229,15 @@ impl Session {
         stop: &AtomicBool,
     ) -> Result<Vec<crate::accessibility::node::Node>, Error> {
         let expired = Instant::now() >= deadline;
-        match self.find(Kind::Batch, window, node, prefetch, deadline, expired, stop)? {
+        match self.find(
+            Kind::Batch(self.profile),
+            window,
+            node,
+            prefetch,
+            deadline,
+            expired,
+            stop,
+        )? {
             Reply::Batch(batch) => Ok(batch.nodes),
             Reply::Single(_) => Err(Error::InvalidCallback),
         }

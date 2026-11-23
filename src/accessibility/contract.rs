@@ -60,6 +60,33 @@ pub(super) const fn registration_flags() -> i32 {
 }
 const _: () = assert!(registration_flags() == 1);
 
+/// `SERVICE_INFO` with `RETRIEVE_INTERACTIVE_WINDOWS` (64) for API 34 hierarchy
+/// snapshots; `Probe` (`probe_mode`) keeps `SERVICE_INFO` unchanged.
+pub(super) const SERVICE_INFO_API34_HIERARCHY: [Field; 22] = [
+    Field::Int(0),  // eventTypes: no event payloads
+    Field::Int(-1), // null packageNames array
+    Field::Int(16), // FEEDBACK_GENERIC
+    Field::Long(0), // notificationTimeout
+    Field::Int(0),
+    Field::Int(0),    // UI timeouts
+    Field::Int(0x52), // INCLUDE_NOT_IMPORTANT_VIEWS | REPORT_VIEW_IDS | RETRIEVE_INTERACTIVE_WINDOWS
+    Field::Int(0),    // crashed
+    Field::NullString,
+    Field::NullString,
+    Field::NullString, // component/resolve/settings
+    Field::Int(1),     // CAN_RETRIEVE_WINDOW_CONTENT
+    Field::Int(0),
+    Field::NullString, // summary
+    Field::Int(0),
+    Field::Int(0),
+    Field::Int(0),     // description/animation/html resources
+    Field::NullString, // description
+    Field::Int(1),     // isAccessibilityTool
+    Field::NullString, // tile service
+    Field::Int(0),
+    Field::Int(0), // intro resource/motion sources
+];
+
 /// Second pinned build. Contract read from this device's own framework.jar
 /// (sha256 65a982a9f223f49aea1a8ddaaa6dd90e97a73db2d5b84797b58f194949c18502) and
 /// services.jar (sha256 9c07fc89884e661fdf9438d40fcfe9625cb196e5920a184a46c04718d8522606);
@@ -131,13 +158,22 @@ impl Profile {
 
     /// The window-enumeration and batch contracts are pinned for this profile.
     pub(super) fn hierarchy(self) -> bool {
-        matches!(self, Self::SamsungA16xApi36)
+        matches!(self, Self::ReferenceApi34 | Self::SamsungA16xApi36)
     }
 
-    /// `AccessibilityServiceInfo` sent at registration.
+    /// `AccessibilityServiceInfo` sent at registration for P1 single-node proofs
+    /// and legacy helpers.
     pub(super) fn service_info(self) -> &'static [Field] {
         match self {
             Self::ReferenceApi34 => &SERVICE_INFO,
+            Self::SamsungA16xApi36 => &SERVICE_INFO_API36,
+        }
+    }
+
+    /// `AccessibilityServiceInfo` sent at registration for full hierarchy snapshots.
+    pub(super) fn hierarchy_service_info(self) -> &'static [Field] {
+        match self {
+            Self::ReferenceApi34 => &SERVICE_INFO_API34_HIERARCHY,
             Self::SamsungA16xApi36 => &SERVICE_INFO_API36,
         }
     }
@@ -216,7 +252,7 @@ mod profile_tests {
         ] {
             assert_eq!(Profile::select(api, uid, arch, fingerprint), None);
         }
-        assert!(!Profile::ReferenceApi34.hierarchy());
+        assert!(Profile::ReferenceApi34.hierarchy());
         assert!(Profile::SamsungA16xApi36.hierarchy());
         assert_eq!(Profile::ReferenceApi34.name(), "reference_api34");
         assert_eq!(Profile::SamsungA16xApi36.name(), "samsung_a16x_api36");
@@ -258,6 +294,20 @@ mod profile_tests {
         assert_eq!(registration_flags(), 1);
         assert_eq!(DONT_SUPPRESS, 1);
     }
+    #[test]
+    fn api34_hierarchy_service_info_sets_interactive_windows_flag_and_matches_api36_prefix() {
+        let legacy = bytes(&SERVICE_INFO);
+        let api34 = bytes(Profile::ReferenceApi34.hierarchy_service_info());
+        let api36 = bytes(Profile::SamsungA16xApi36.hierarchy_service_info());
+        assert_eq!(api34.len(), 92);
+        assert_eq!(api34[..28], legacy[..28]);
+        assert_eq!(i32::from_le_bytes(api34[28..32].try_into().unwrap()), 0x52);
+        assert_eq!(api34[32..92], legacy[32..92]);
+        assert_eq!(api36.len(), 96);
+        assert_eq!(api36[..92], api34[..]);
+        assert_eq!(api36[92..], [0; 4]);
+    }
+
     #[test]
     fn api36_service_info_is_the_api34_layout_plus_one_trailing_int() {
         let old = bytes(&SERVICE_INFO);

@@ -334,19 +334,19 @@ impl OwnedParcel {
 struct Shared {
     slot: Mutex<Slot<Strong>>,
     changed: Condvar,
-    /// Selects the client callbacks this session tolerates; fixed at creation.
-    profile: Profile,
+    /// Selects hierarchy callbacks (revocation + `onSystemActionsChanged`) vs legacy P1 probes.
+    hierarchy: bool,
 }
 impl Shared {
     #[cfg(test)]
     fn new() -> Self {
-        Self::for_profile(Profile::ReferenceApi34)
+        Self::for_hierarchy(false)
     }
-    fn for_profile(profile: Profile) -> Self {
+    fn for_hierarchy(hierarchy: bool) -> Self {
         Self {
             slot: Mutex::new(Slot::default()),
             changed: Condvar::new(),
-            profile,
+            hierarchy,
         }
     }
     fn closing(&self) {
@@ -499,9 +499,9 @@ fn dispatch(binder: *mut Binder, code: u32, parcel: *const Parcel) -> i32 {
     // A revoked connection, released only after the slot is unlocked (as `closing`).
     let mut revoked = None;
     let result = match code {
-        contract::INIT if shared.profile == Profile::SamsungA16xApi36 => {
-            // This build calls init again with a null connection while it resets
-            // the session; that is a revocation notice, not a malformed callback.
+        contract::INIT if shared.hierarchy => {
+            // Hierarchy sessions tolerate init again with a null connection
+            // while the system resets the session; counted as a revocation.
             // The dead connection leaves the slot so no request reuses it.
             match decode_init_nullable(&mut reader) {
                 Ok(Some((id, connection))) => slot.accept(id, connection),
@@ -519,9 +519,7 @@ fn dispatch(binder: *mut Binder, code: u32, parcel: *const Parcel) -> i32 {
             slot.invalidations = slot.invalidations.saturating_add(1);
             reader.finish()
         }
-        contract::SYSTEM_ACTIONS_CHANGED if shared.profile == Profile::SamsungA16xApi36 => {
-            reader.finish()
-        }
+        contract::SYSTEM_ACTIONS_CHANGED if shared.hierarchy => reader.finish(),
         _ => {
             slot.counters.ignored = slot.counters.ignored.saturating_add(1);
             return -74;
@@ -619,12 +617,16 @@ struct Session {
     cleanup_due: bool,
     query_ids: super::query::Ids,
     profile: Profile,
+    hierarchy: bool,
 }
 impl Session {
     fn open() -> Result<Self, Error> {
-        Self::open_profile(Profile::ReferenceApi34)
+        Self::open_for(Profile::ReferenceApi34, false)
     }
     fn open_profile(profile: Profile) -> Result<Self, Error> {
+        Self::open_for(profile, true)
+    }
+    fn open_for(profile: Profile, hierarchy: bool) -> Result<Self, Error> {
         let api = Api::global()?;
         let classes = Classes::global(api)?;
         start_pool()?;
@@ -636,11 +638,12 @@ impl Session {
         if !unsafe { (api.associate)(manager.pointer.as_ptr(), classes.manager.as_ptr()) } {
             return Err(Error::Runtime("manager_descriptor_mismatch"));
         }
-        let shared = Arc::new(Shared::for_profile(profile));
+        let shared = Arc::new(Shared::for_hierarchy(hierarchy));
         let owner = local_binder(api, classes.owner, &shared)?;
         let client = local_binder(api, classes.client, &shared)?;
         Ok(Self {
             profile,
+            hierarchy,
             manager,
             _owner: owner,
             client,
@@ -653,7 +656,12 @@ impl Session {
         let mut request = OwnedParcel::new(&self.manager)?;
         request.binder(&self._owner)?;
         request.binder(&self.client)?;
-        request.info(self.profile.service_info())?;
+        let service_info = if self.hierarchy {
+            self.profile.hierarchy_service_info()
+        } else {
+            self.profile.service_info()
+        };
+        request.info(service_info)?;
         request.int(0)?; // user 0 only, on every pinned profile
         let flags = contract::registration_flags();
         if flags != 1 {

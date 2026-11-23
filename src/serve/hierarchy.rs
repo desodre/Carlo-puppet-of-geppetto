@@ -222,7 +222,8 @@ mod tests {
 
     #[test]
     fn off_the_pinned_profile_the_device_source_is_unavailable_without_binder() {
-        // The host and the API 34 reference: the gate fails before anything opens.
+        // Off a pinned build (and always on host, where fingerprint is None),
+        // the gate refuses before anything opens.
         for diagnostics in [
             Diagnostics::from_environment("linux", "x86_64", None, None, Some(1000), None),
             Diagnostics::from_environment(

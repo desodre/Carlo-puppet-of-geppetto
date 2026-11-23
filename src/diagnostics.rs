@@ -230,8 +230,9 @@ impl Diagnostics {
 }
 
 /// The capability list. Display capture and the H.264 stream exist only where
-/// the mirror profile gate passes, the hierarchy only where its own exact gate
-/// passes (one build each). The serve protocol itself runs on every target.
+/// the mirror profile gate passes, the hierarchy only where its exact pinned
+/// profile gate passes (API 34 reference or API 36 build). The serve protocol
+/// itself runs on every target.
 fn capabilities(pinned_mirror_profile: bool, pinned_hierarchy_profile: bool) -> Vec<Capability> {
     let mirror = |name, available_reason| Capability {
         name,
@@ -247,9 +248,9 @@ fn capabilities(pinned_mirror_profile: bool, pinned_hierarchy_profile: bool) -> 
             name: "binder_hierarchy",
             available: pinned_hierarchy_profile,
             reason: if pinned_hierarchy_profile {
-                "hierarchy.dump over the control channel on the pinned build; registered lazily once per serve session, unregistered on exit"
+                "hierarchy.dump over the control channel on a pinned build; registered lazily once per serve session, unregistered on exit"
             } else {
-                "unavailable on this target: the hierarchy is pinned to one validated build"
+                "unavailable on this target: the hierarchy is pinned to validated builds"
             },
         },
         mirror(

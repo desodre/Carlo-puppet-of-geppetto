@@ -39,6 +39,10 @@ impl Transport for Remote<'_> {
     /// `getWindows`: no arguments; the system may hold the call for up to five
     /// seconds while it starts tracking windows. A synchronous transaction
     /// cannot be cancelled: the snapshot checks its deadline when this returns.
+    fn window_layout(&self) -> crate::accessibility::window::Layout {
+        crate::accessibility::window::Layout::from_profile(self.session.profile)
+    }
+
     fn windows(&mut self) -> Result<Vec<u8>, Error> {
         if self.stop.load(Ordering::Relaxed) {
             return Err(Error::Cancelled);
